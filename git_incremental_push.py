@@ -10,10 +10,6 @@ MAX_SLEEP_SECONDS = 480  # 8 minutes (480s)
 # Define the step-by-step commits to make a realistic, incremental git history
 commits = [
     {
-        "message": "chore: initialize project and root configuration files",
-        "files": [".gitignore", "requirements.txt", "requirements-voice.txt", ".env.example"]
-    },
-    {
         "message": "chore: add execution scripts and git automation utility",
         "files": ["start_causalguard.bat", "git_incremental_push.py"]
     },
@@ -192,8 +188,8 @@ def main():
             continue
             
         # Push
-        print("  Pushing to remote origin main...")
-        if not run_cmd(["git", "push", "origin", "main"]):
+        print("  Pushing to remote origin main (forced)...")
+        if not run_cmd(["git", "push", "-f", "origin", "main"]):
             print("  Push failed. Make sure you are authenticated to GitHub.")
             print("  Halting script so you can resolve auth, then rerun.")
             break
