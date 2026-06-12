@@ -1,0 +1,44 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python caching & compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Local databases & logs
+*.db
+*.sqlite3
+causalguard.db
+*.log
+
+# Frontend dependencies & builds
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.eslintcache
+
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary media uploads/synthesis
+temp_voice_upload.wav
+temp_synthesis_output.wav
+temp_*.wav
+
+# Scratch and walkthrough files
+walkthrough.md
+task.md
+implementation_plan.md
