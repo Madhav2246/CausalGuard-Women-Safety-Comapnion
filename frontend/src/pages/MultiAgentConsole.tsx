@@ -52,7 +52,11 @@ export default function MultiAgentConsole({ onBack }: MultiAgentConsoleProps) {
       rec.onerror = (e: any) => {
         console.error(e);
         setIsListening(false);
-        setError("Microphone input error. Please type your query.");
+        if (e.error === 'not-allowed') {
+          setError("Microphone access is blocked. Please click the lock/microphone icon in your browser's address bar, set permission to 'Allow', and refresh. Note: Speech recognition requires a secure context (localhost or HTTPS).");
+        } else {
+          setError(`Microphone input error (${e.error || 'unknown'}). Please type your query.`);
+        }
       };
 
       rec.onend = () => {

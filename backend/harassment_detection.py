@@ -7,9 +7,19 @@ from backend.llm.gemini_client import generate_agent_response
 
 router = APIRouter(prefix="/api/harassment", tags=["Digital Safety"])
 
-THREAT_KEYWORDS = ["kill", "track you", "watch you", "where you live", "follow you", "hurt you", "ruin you"]
-HARASSMENT_KEYWORDS = ["bitch", "sexy", "send pics", "nude", "whore", "creep", "stalk", "abusing", "harass", "abuse"]
-SUSPICIOUS_KEYWORDS = ["alone", "meet me", "night", "where are you", "your number", "address", "unusual"]
+THREAT_KEYWORDS = [
+    "kill", "track you", "watch you", "where you live", "follow you", "hurt you", "ruin you",
+    "private pictures", "private photos", "private pics", "private videos", "leak", "share your",
+    "send money", "pay me", "post your", "expose you", "blackmail"
+]
+HARASSMENT_KEYWORDS = [
+    "bitch", "sexy", "send pics", "nude", "whore", "creep", "stalk", "abusing", "harass", "abuse",
+    "nudes", "naked", "dick", "pussy", "sex", "breast", "ass", "send pictures", "intimate"
+]
+SUSPICIOUS_KEYWORDS = [
+    "alone", "meet me", "night", "where are you", "your number", "address", "unusual",
+    "snapchat", "telegram", "private chat", "whatsapp number", "meet up"
+]
 
 HARASSMENT_SYSTEM_PROMPT = """
 You are a Digital Safety Analyst for CausalGuard.
@@ -59,8 +69,19 @@ def check_message(request: HarassmentCheckRequest):
                 )
                 res = future.result(timeout=4.0)
                 
+            category = str(res.get("category", "Safe")).strip().title()
+            if category not in ["Safe", "Suspicious", "Harassment", "Threatening"]:
+                if "threat" in category.lower() or "danger" in category.lower() or "blackmail" in category.lower():
+                    category = "Threatening"
+                elif "harass" in category.lower() or "abuse" in category.lower():
+                    category = "Harassment"
+                elif "suspect" in category.lower() or "suspicious" in category.lower():
+                    category = "Suspicious"
+                else:
+                    category = "Safe"
+
             return HarassmentCheckResponse(
-                category=res.get("category", "Safe"),
+                category=category,
                 confidence_score=res.get("confidence_score", 0.9),
                 explanation=res.get("explanation", "Analyzed using Gemini safety models."),
                 suggested_action=res.get("suggested_action", "No immediate safety steps needed."),

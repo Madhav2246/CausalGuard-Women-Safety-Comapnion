@@ -13,6 +13,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
   const [typedCommand, setTypedCommand] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [backendResponse, setBackendResponse] = useState<any>(null);
   const [voiceRisk, setVoiceRisk] = useState<any>(null);
   const [voiceMonitorActive, setVoiceMonitorActive] = useState(() => {
@@ -33,6 +34,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
 
   const startSpeechListen = () => {
     setIsListening(true);
+    setError(null);
     setTranscribedText('Listening...');
     speechService.startListening(
       selectedLang,
@@ -45,7 +47,8 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
       },
       (err) => {
         setIsListening(false);
-        setTranscribedText(`Error: ${err.message}. Try typing instead.`);
+        setError(err.message);
+        setTranscribedText('');
       }
     );
   };
@@ -53,6 +56,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!typedCommand) return;
+    setError(null);
     setTranscribedText(typedCommand);
     submitCommand(typedCommand, selectedLang);
     setTypedCommand('');
@@ -60,6 +64,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
 
   const submitCommand = async (text: string, lang: string) => {
     try {
+      setError(null);
       // 1. Submit voice command to supervisor graph
       const res = await api.voice.sendCommand(text, lang);
       setBackendResponse(res);
@@ -85,7 +90,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
         }, 1500);
       }
     } catch (err: any) {
-      setTranscribedText("Error parsing command: " + err.message);
+      setError("Error parsing command: " + err.message);
     }
   };
 
@@ -168,6 +173,30 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
               {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="w-1 bg-purple-400 rounded-full animate-bounce" style={{ height: `${Math.random() * 20 + 8}px`, animationDelay: `${i * 0.1}s` }}></div>
               ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="w-full p-4 bg-rose-950/20 border border-rose-900/30 rounded-2xl flex items-start space-x-3 text-xs text-rose-300">
+              <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-left">
+                <span className="font-bold block text-rose-400">
+                  {error === 'not-allowed' ? 'Microphone Permission Blocked' : 'Voice Assistant Error'}
+                </span>
+                <p className="leading-relaxed">
+                  {error === 'not-allowed' ? (
+                    <>
+                      Microphone access has been denied. Please click the <strong>lock / microphone icon</strong> in your browser's address bar, update the setting to <strong>Allow</strong>, and refresh the page.
+                      <br />
+                      <span className="text-[10px] text-rose-400/70 block mt-1 font-mono">
+                        Note: Web speech recognition requires a secure context (localhost or HTTPS).
+                      </span>
+                    </>
+                  ) : (
+                    error
+                  )}
+                </p>
+              </div>
             </div>
           )}
 

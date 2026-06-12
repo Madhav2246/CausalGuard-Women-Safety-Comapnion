@@ -32,8 +32,20 @@ def init_rag_index():
         from llama_index.llms.gemini import Gemini
         from llama_index.core import Settings
         
-        # Configure LlamaIndex to use Gemini 2.5 Flash
-        Settings.llm = Gemini(model="models/gemini-2.5-flash", api_key=api_key)
+        # Configure LlamaIndex to use Gemini (try multiple model options if one fails)
+        llm = None
+        for model_name in ["models/gemini-1.5-flash", "models/gemini-1.5-flash-latest", "models/gemini-2.0-flash-exp", "models/gemini-pro"]:
+            try:
+                llm = Gemini(model=model_name, api_key=api_key)
+                logger.info(f"Successfully configured LlamaIndex LLM with model: {model_name}")
+                break
+            except Exception as e:
+                logger.warning(f"LlamaIndex Gemini model {model_name} initialization failed: {e}. Trying next option...")
+        
+        if not llm:
+            raise ValueError("All candidate Gemini models failed to initialize.")
+            
+        Settings.llm = llm
         
         # Use a lightweight fast embedding model
         from llama_index.embeddings.huggingface import HuggingFaceEmbedding

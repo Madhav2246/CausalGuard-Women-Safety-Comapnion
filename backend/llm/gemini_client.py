@@ -109,11 +109,23 @@ def get_rule_fallback(system_prompt: str, user_prompt: str) -> str:
         action = "None needed."
         exp = "The message appears to be safe and standard."
 
-        if any(w in user_lower for w in ["kill", "hurt", "stalk", "sex", "bitch", "nude", "address", "track you"]):
-            category = "Threatening" if "kill" in user_lower or "hurt" in user_lower else "Harassment"
+        safety_keywords = [
+            "kill", "hurt", "stalk", "sex", "bitch", "nude", "address", "track you", 
+            "private pictures", "private photos", "private pics", "private videos", "leak", "share your",
+            "send money", "pay me", "post your", "expose you", "blackmail", "nudes", "naked",
+            "send pics", "send pictures", "whore", "abuse", "harass", "abusing"
+        ]
+        if any(w in user_lower for w in safety_keywords):
+            # Check if it's a threat (blackmail, physical harm, tracking)
+            is_threat = any(w in user_lower for w in [
+                "kill", "hurt", "stalk", "track you", "private pictures", "private photos", 
+                "private pics", "private videos", "leak", "share your", "send money", "pay me", 
+                "post your", "expose you", "blackmail"
+            ])
+            category = "Threatening" if is_threat else "Harassment"
             confidence = 0.89
             action = "Block the number immediately, take screenshots, save this log in the Evidence Locker, and report to cybercrime.gov.in."
-            exp = "High threat indicators present. The sender is attempting to intimidate or track you, violating personal safety boundaries."
+            exp = "High threat indicators present. The sender is attempting to blackmail, intimidate, or track you, violating personal safety boundaries."
 
         return json.dumps({
             "category": category,
@@ -177,32 +189,36 @@ def generate_agent_response(
         fallback_json = get_rule_fallback(system_prompt, user_prompt)
         return json.loads(fallback_json)
 
-    try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            system_instruction=system_prompt
-        )
-        
-        prompt = user_prompt
-        if context:
-            prompt = f"Context Guidelines:\n{context}\n\nUser Message:\n{user_prompt}"
+    last_error = None
+    for model_name in ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-pro"]:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=system_prompt
+            )
+            
+            prompt = user_prompt
+            if context:
+                prompt = f"Context Guidelines:\n{context}\n\nUser Message:\n{user_prompt}"
 
-        # Request parameters
-        config = {}
-        if json_mode:
-            config["response_mime_type"] = "application/json"
+            # Request parameters
+            config = {}
+            if json_mode:
+                config["response_mime_type"] = "application/json"
 
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(model.generate_content, prompt, generation_config=config)
-            response = future.result(timeout=5.0)
-        
-        text_resp = response.text.strip()
-        if json_mode:
-            return json.loads(text_resp)
-        return {"response": text_resp}
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(model.generate_content, prompt, generation_config=config)
+                response = future.result(timeout=5.0)
+            
+            text_resp = response.text.strip()
+            if json_mode:
+                return json.loads(text_resp)
+            return {"response": text_resp}
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Gemini API model {model_name} failed: {e}. Trying next model...")
 
-    except Exception as e:
-        logger.error(f"Gemini API call failed or timed out: {e}. Falling back to rule-based parser.")
-        fallback_json = get_rule_fallback(system_prompt, user_prompt)
-        return json.loads(fallback_json)
+    logger.error(f"All Gemini models failed. Last error: {last_error}. Falling back to rule-based parser.")
+    fallback_json = get_rule_fallback(system_prompt, user_prompt)
+    return json.loads(fallback_json)
