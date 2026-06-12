@@ -6,6 +6,7 @@ from backend.schemas import CabTripStart, CabLocationUpdate, CabDeviationCheck
 from backend.route_risk import haversine_distance
 from datetime import datetime
 import json
+import os
 
 router = APIRouter(prefix="/api/cab", tags=["Cab & Auto Safety"])
 
@@ -15,6 +16,22 @@ def start_cab_monitoring(
     current_user: User = Depends(get_current_verified_woman),
     db: Session = Depends(get_db)
 ):
+    route_coords = None
+    if os.getenv("USE_OSRM", "true").lower() == "true":
+        try:
+            from backend.journey import get_osrm_route
+            routes = get_osrm_route(trip.start_lat, trip.start_lng, trip.dest_lat, trip.dest_lng, profile="driving")
+            if routes:
+                route_coords = [[pt[1], pt[0]] for pt in routes[0]["geometry"]["coordinates"]]
+        except Exception:
+            pass
+            
+    if not route_coords:
+        route_coords = [
+            [trip.start_lat, trip.start_lng],
+            [trip.dest_lat, trip.dest_lng]
+        ]
+
     db_journey = Journey(
         user_id=current_user.id,
         start_lat=trip.start_lat,
@@ -28,7 +45,8 @@ def start_cab_monitoring(
         mode="Cab Safety",
         risk_score=20,
         status="Active",
-        start_time=datetime.utcnow()
+        start_time=datetime.utcnow(),
+        route_polyline=json.dumps(route_coords)
     )
     db.add(db_journey)
     db.commit()
@@ -68,17 +86,27 @@ def check_route_deviation(
     journey.current_lat = check.current_lat
     journey.current_lng = check.current_lng
     
-    safest_route_coords = [
-        [18.5308, 73.8474], [18.5290, 73.8505], [18.5245, 73.8488], [18.5200, 73.8465], [18.5162, 73.8415]
-    ]
+    polyline_coords = []
+    if journey.route_polyline:
+        try:
+            polyline_coords = json.loads(journey.route_polyline)
+        except Exception:
+            pass
+            
+    if not polyline_coords:
+        polyline_coords = [
+            [journey.start_lat, journey.start_lng],
+            [journey.dest_lat, journey.dest_lng]
+        ]
 
     min_dist = min([
         haversine_distance(check.current_lat, check.current_lng, pt[0], pt[1])
-        for pt in safest_route_coords
+        for pt in polyline_coords
     ])
 
     deviation_detected = False
-    if min_dist > 0.8:
+    # Threshold: 0.5km for cab deviation
+    if min_dist > 0.5:
         deviation_detected = True
         journey.risk_score = 75
         db.commit()

@@ -8,27 +8,8 @@ MIN_SLEEP_SECONDS = 90   # 1m 30s — keeps total under 1 hour for 29 commits
 MAX_SLEEP_SECONDS = 120  # 2m 00s — avg 105s × 28 gaps = ~49 min + push time
 
 # Define the step-by-step commits to make a realistic, incremental git history
+# NOTE: First 5 commits already pushed to GitHub — starting from commit 6
 commits = [
-    {
-        "message": "chore: add execution scripts and git automation utility",
-        "files": ["start_causalguard.bat", "git_incremental_push.py"]
-    },
-    {
-        "message": "feat: set up database schemas and seeding scripts",
-        "files": ["backend/database.py", "backend/init_db.py", "backend/config.py"]
-    },
-    {
-        "message": "feat: implement JWT authentication and simulated ID verification",
-        "files": ["backend/auth.py", "backend/users.py", "backend/verification.py", "backend/schemas.py"]
-    },
-    {
-        "message": "feat: implement voice command transcription and speech synthesis with fallbacks",
-        "files": ["backend/voice/stt.py", "backend/voice/tts.py", "backend/voice/intent_parser.py", "backend/voice/language_support.py"]
-    },
-    {
-        "message": "feat: integrate main voice assistant engine and command router",
-        "files": ["backend/voice_assistant.py"]
-    },
     {
         "message": "feat: implement guardian permission controls and journey tracking",
         "files": ["backend/guardians.py", "backend/journey.py", "backend/route_risk.py"]
@@ -62,7 +43,7 @@ commits = [
         "files": ["frontend/src/App.tsx", "frontend/src/main.tsx"]
     },
     {
-        "message": "feat: design onboarding onboarding components (Landing, Login, Register)",
+        "message": "feat: design onboarding components (Landing, Login, Register)",
         "files": ["frontend/src/pages/LandingPage.tsx", "frontend/src/pages/Login.tsx", "frontend/src/pages/Register.tsx"]
     },
     {

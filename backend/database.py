@@ -1,10 +1,13 @@
 import json
+import os
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
-DATABASE_URL = "sqlite:///./causalguard.db"
+# Always use an absolute path so the DB location is consistent regardless of CWD
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DATABASE_URL = f"sqlite:///{os.path.join(_HERE, 'causalguard.db')}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -207,6 +210,7 @@ class NewsAlert(Base):
     lat = Column(Float)
     lng = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    is_live = Column(Boolean, default=False)
 
 # 14. Health Profiles Table
 class HealthProfile(Base):

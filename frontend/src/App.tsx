@@ -22,6 +22,7 @@ import RagSources from './pages/RagSources';
 
 import { Shield, Phone, AlertTriangle, ShieldCheck, ShieldAlert, Star, Volume2, UserCheck, X } from 'lucide-react';
 import { api } from './api';
+import { locationService } from './services/locationService';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<string>('landing');
@@ -36,6 +37,7 @@ export default function App() {
   const [sosActive, setSosActive] = useState(false);
   const [safeCheckCountdown, setSafeCheckCountdown] = useState(10);
   const [feedbackJourneyId, setFeedbackJourneyId] = useState<number | null>(null);
+  const [activeJourneyId, setActiveJourneyId] = useState<number | null>(null);
 
   const [feedbackScore, setFeedbackScore] = useState(5);
   const [feedbackAccurate, setFeedbackAccurate] = useState(true);
@@ -120,9 +122,18 @@ export default function App() {
 
   const handleTriggerSOS = async () => {
     try {
+      let lat = 18.5200;
+      let lng = 73.8400;
+      try {
+        const coords = await locationService.getCurrentLocation();
+        lat = coords.lat;
+        lng = coords.lng;
+      } catch (e) {
+        console.warn("Could not get GPS for SOS: ", e);
+      }
       await api.emergency.triggerSOS({
-        latitude: 18.5200,
-        longitude: 73.8400,
+        latitude: lat,
+        longitude: lng,
         evidence_consent: true
       });
       setSosActive(true);
@@ -244,9 +255,8 @@ export default function App() {
             destLng={mapParams.destLng}
             mode={mapParams.mode}
             checkInMinutes={mapParams.checkInMinutes}
-            onBack={() => {
-              const activeJourneyMockId = 1;
-              setFeedbackJourneyId(activeJourneyMockId);
+            onBack={(journeyId) => {
+              setFeedbackJourneyId(journeyId || activeJourneyId);
               setCurrentPage('woman-dashboard');
             }}
             onTriggerSOS={handleTriggerSOS}

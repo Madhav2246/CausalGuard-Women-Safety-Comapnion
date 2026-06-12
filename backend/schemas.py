@@ -151,6 +151,7 @@ class RouteRecommendRequest(BaseModel):
 class RouteRecommendResponse(BaseModel):
     routes: List[RouteOption]
     explanation: str
+    fallback_used: Optional[bool] = False
 
 class RouteRiskScoreRequest(BaseModel):
     lat: float
@@ -217,6 +218,7 @@ class NewsAlertOut(BaseModel):
     lat: float
     lng: float
     timestamp: datetime
+    is_live: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -261,6 +263,7 @@ class HarassmentCheckResponse(BaseModel):
     confidence_score: float
     explanation: str
     suggested_action: str
+    analysis_method: Optional[str] = "keyword_fallback"
 
 # Evidence Schemas
 class EvidenceCreate(BaseModel):

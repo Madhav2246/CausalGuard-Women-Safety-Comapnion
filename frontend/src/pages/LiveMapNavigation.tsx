@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Shield, Compass, Navigation, Eye, User, Phone, CheckCircle, Info, ShieldAlert } from 'lucide-react';
 import L from 'leaflet';
 import { api } from '../api';
+import { locationService } from '../services/locationService';
 
 interface LiveMapNavigationProps {
   startLat: number;
@@ -10,7 +11,7 @@ interface LiveMapNavigationProps {
   destLng: number;
   mode: string;
   checkInMinutes: number;
-  onBack: () => void;
+  onBack: (journeyId?: number | null) => void;
   onTriggerSOS: () => void;
   onTriggerSafeCheck: (reason: string) => void;
 }
@@ -41,6 +42,17 @@ export default function LiveMapNavigation({
   const [riskLevel, setRiskLevel] = useState('Low');
   const [activeJourneyId, setActiveJourneyId] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(checkInMinutes * 60);
+  const [fallbackUsed, setFallbackUsed] = useState(false);
+  const [voiceMonitorActive, setVoiceMonitorActive] = useState(false);
+  const [lastVoiceCheck, setLastVoiceCheck] = useState<string>('Never');
+  const [voiceRiskScore, setVoiceRiskScore] = useState<number | null>(null);
+  const [isListeningForSafeWord, setIsListeningForSafeWord] = useState(false);
+
+  const activeJourneyIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    activeJourneyIdRef.current = activeJourneyId;
+  }, [activeJourneyId]);
 
   useEffect(() => {
     api.journey.recommendRoutes({
@@ -53,6 +65,7 @@ export default function LiveMapNavigation({
     }).then(res => {
       setRoutes(res.routes);
       setExplanation(res.explanation);
+      setFallbackUsed(!!res.fallback_used);
       
       const defaultRoute = res.routes.find((r: any) => r.route_id === 'safest');
       if (defaultRoute) {
@@ -83,21 +96,85 @@ export default function LiveMapNavigation({
       });
     }, 1000);
 
+    const watchId = locationService.watchLocation(
+      (coords) => {
+        setCurrentLat(coords.lat);
+        setCurrentLng(coords.lng);
+        const jId = activeJourneyIdRef.current;
+        if (jId) {
+          api.journey.updateLocation({
+            latitude: coords.lat,
+            longitude: coords.lng
+          }).then(res => {
+            setRiskScore(res.risk_score);
+          }).catch(() => {});
+        }
+      },
+      (err) => {
+        console.warn("GPS watch failed", err);
+      }
+    );
+
     return () => {
       clearInterval(timer);
+      locationService.stopWatching();
     };
   }, []);
 
   useEffect(() => {
+    if (!voiceMonitorActive) {
+      setIsListeningForSafeWord(false);
+      speechService.stopListening();
+      return;
+    }
+
+    const checkInterval = setInterval(() => {
+      setIsListeningForSafeWord(true);
+      speechService.speak("Say 'I am safe' or tap Safe.", "English").then(() => {
+        speechService.startListening(
+          "English",
+          (text) => {
+            setIsListeningForSafeWord(false);
+            api.voice.riskAnalysis({
+              transcript: text,
+              language: "English"
+            }).then((res) => {
+              setVoiceRiskScore(res.voice_risk_score);
+              setLastVoiceCheck(new Date().toLocaleTimeString());
+              if (res.voice_risk_score > 70) {
+                onTriggerSafeCheck(`High Voice Risk Detected (${res.voice_risk_score}%)`);
+              }
+            }).catch((e) => console.warn(e));
+          },
+          () => {
+            setIsListeningForSafeWord(false);
+          },
+          (err) => {
+            setIsListeningForSafeWord(false);
+            console.warn("Monitor listening failed: ", err);
+          }
+        );
+      });
+    }, 45000); // 45 seconds
+
+    return () => {
+      clearInterval(checkInterval);
+      speechService.stopListening();
+    };
+  }, [voiceMonitorActive]);
+
+  // 1. Initialize map on mount and clean up on unmount
+  useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current).setView([18.5200, 73.8400], 14);
+      const mapInstance = L.map(mapContainerRef.current).setView([startLat, startLng], 14);
+      mapRef.current = mapInstance;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '© OpenStreetMap contributors'
-      }).addTo(mapRef.current);
+      }).addTo(mapInstance);
 
-      otherMarkersRef.current = L.layerGroup().addTo(mapRef.current);
+      otherMarkersRef.current = L.layerGroup().addTo(mapInstance);
 
       api.journey.getNearbyPolice().then(policeList => {
         policeList.forEach(ps => {
@@ -144,23 +221,44 @@ export default function LiveMapNavigation({
         });
       }).catch(() => {});
 
-      L.marker([destLat, destLng], {
-        icon: L.divIcon({
-          className: 'custom-dest-marker',
-          html: `<div class="w-8 h-8 rounded-full bg-rose-500 border border-white flex items-center justify-center text-white text-xs shadow-xl font-bold">🏁</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16]
-        })
-      }).addTo(mapRef.current).bindPopup("Destination");
+      if (typeof destLat === 'number' && !isNaN(destLat) && typeof destLng === 'number' && !isNaN(destLng)) {
+        L.marker([destLat, destLng], {
+          icon: L.divIcon({
+            className: 'custom-dest-marker',
+            html: `<div class="w-8 h-8 rounded-full bg-rose-500 border border-white flex items-center justify-center text-white text-xs shadow-xl font-bold">🏁</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          })
+        }).addTo(mapInstance).bindPopup("Destination");
+      }
     }
 
-    if (mapRef.current && routes.length > 0) {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        polylineRef.current = null;
+        userMarkerRef.current = null;
+      }
+    };
+  }, []);
+
+  // 2. Update polyline and user marker when route/coordinates change
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Trigger map invalidation to ensure it resizes correctly if container was toggled/resized
+    mapRef.current.invalidateSize();
+
+    // Render polyline
+    if (routes.length > 0) {
       if (polylineRef.current) {
         polylineRef.current.remove();
+        polylineRef.current = null;
       }
 
       const activeRoute = routes.find(r => r.route_id === selectedRoute);
-      if (activeRoute) {
+      if (activeRoute && activeRoute.coordinates && activeRoute.coordinates.length > 0) {
         setRiskScore(activeRoute.risk_score);
         setRiskLevel(activeRoute.risk_level);
 
@@ -170,11 +268,19 @@ export default function LiveMapNavigation({
           opacity: 0.85
         }).addTo(mapRef.current);
         
-        mapRef.current.fitBounds(polylineRef.current.getBounds(), { padding: [40, 40] });
+        try {
+          const bounds = polylineRef.current.getBounds();
+          if (bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
+            mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+          }
+        } catch (e) {
+          console.warn("Leaflet fitBounds failed: ", e);
+        }
       }
     }
 
-    if (mapRef.current) {
+    // Render user marker
+    if (typeof currentLat === 'number' && !isNaN(currentLat) && typeof currentLng === 'number' && !isNaN(currentLng)) {
       if (userMarkerRef.current) {
         userMarkerRef.current.setLatLng([currentLat, currentLng]);
       } else {
@@ -190,15 +296,6 @@ export default function LiveMapNavigation({
     }
   }, [routes, selectedRoute, currentLat, currentLng]);
 
-  useEffect(() => {
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -206,7 +303,13 @@ export default function LiveMapNavigation({
   };
 
   const handleSimulateGPSMove = (routeType: 'safe' | 'unsafe') => {
-    const routePoints = routeType === 'safe' ? ROUTE_SAFEST : ROUTE_SHORTEST;
+    const targetRouteId = routeType === 'safe' ? 'safest' : 'shortest';
+    const activeRoute = routes.find(r => r.route_id === targetRouteId) || routes.find(r => r.route_id === 'safest') || routes[0];
+    if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length === 0) {
+      alert("No routing points loaded. Please wait a second for routes to load.");
+      return;
+    }
+    const routePoints = activeRoute.coordinates;
     
     let index = 0;
     const moveInterval = setInterval(() => {
@@ -224,8 +327,9 @@ export default function LiveMapNavigation({
           }).catch(() => {});
         }
 
-        if (selectedRoute === 'safest' && routeType === 'unsafe' && index === 2) {
-          onTriggerSafeCheck("Route Deviation Detected");
+        // Trigger safe check for route deviation simulation if selected route is safest but user commuted on the shortest/unsafe route
+        if (selectedRoute === 'safest' && routeType === 'unsafe' && index === Math.floor(routePoints.length / 2)) {
+          onTriggerSafeCheck("Route Deviation Detected (Simulation)");
         }
 
         index++;
@@ -240,22 +344,15 @@ export default function LiveMapNavigation({
     if (activeJourneyId) {
       api.journey.endJourney({ journey_id: activeJourneyId })
         .then(() => {
-          onBack();
+          onBack(activeJourneyId);
         })
         .catch(() => {
-          onBack();
+          onBack(activeJourneyId);
         });
     } else {
-      onBack();
+      onBack(null);
     }
   };
-
-  const ROUTE_SHORTEST = [
-    [18.5308, 73.8474], [18.5265, 73.8432], [18.5212, 73.8398], [18.5162, 73.8415]
-  ];
-  const ROUTE_SAFEST = [
-    [18.5308, 73.8474], [18.5290, 73.8505], [18.5245, 73.8488], [18.5200, 73.8465], [18.5162, 73.8415]
-  ];
 
   return (
     <div className="w-full max-w-6xl mx-auto py-6 px-4 min-h-screen flex flex-col md:flex-row gap-6">
@@ -276,6 +373,42 @@ export default function LiveMapNavigation({
           >
             End Journey
           </button>
+        </div>
+
+        {fallbackUsed && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/25 text-amber-400 rounded-xl text-xs flex items-center space-x-2 animate-pulse">
+            <span className="font-semibold">⚠️ Demo Routing:</span>
+            <span>OSRM server failed/timed out. Pune local demo coordinates active as fallback.</span>
+          </div>
+        )}
+
+        <div className="mb-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Voice Safety Monitor</span>
+              {voiceMonitorActive && (
+                <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-full text-[9px] font-bold uppercase tracking-wider animate-pulse">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5 font-sans">
+              {voiceMonitorActive
+                ? `Last Checked: ${lastVoiceCheck} | Voice Risk Score: ${voiceRiskScore !== null ? voiceRiskScore : 'N/A'}`
+                : "Continuous voice stress/fear analyzer during journey."}
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            {isListeningForSafeWord && (
+              <span className="text-[10px] text-rose-400 animate-ping font-bold">🎤 Listening...</span>
+            )}
+            <input
+              type="checkbox"
+              checked={voiceMonitorActive}
+              onChange={(e) => setVoiceMonitorActive(e.target.checked)}
+              className="w-5 h-5 accent-purple-500 cursor-pointer"
+            />
+          </div>
         </div>
 
         <div ref={mapContainerRef} className="w-full h-[380px] md:h-[480px] rounded-2xl relative z-10"></div>

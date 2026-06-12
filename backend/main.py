@@ -25,6 +25,7 @@ from backend.emotional_safety import router as emotional_router
 from backend.evidence_locker import router as evidence_router
 from backend.privacy import router as privacy_router
 from backend.feedback_learning import router as feedback_router
+from backend.voice_risk_analysis import router as voice_risk_router
 
 # Import new Agent & Voice modules
 from backend.agents.rag_agent import init_rag_index
@@ -75,6 +76,7 @@ app.include_router(emotional_router)
 app.include_router(evidence_router)
 app.include_router(privacy_router)
 app.include_router(feedback_router)
+app.include_router(voice_risk_router)
 
 # ----------------- MULTI-AGENT & RAG SCHEMAS & ENDPOINTS -----------------
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Compass, MapPin, Clock, ArrowRight, Activity, BookOpen, AlertCircle } from 'lucide-react';
+import { locationService } from '../services/locationService';
 
 interface SafeJourneyModeProps {
   onNavigateToMap: (params: {
@@ -13,23 +14,58 @@ interface SafeJourneyModeProps {
   onBack: () => void;
 }
 
+const PUNE_PRESETS: { [key: string]: { lat: number; lng: number } } = {
+  'deccan': { lat: 18.5162, lng: 73.8415 },
+  'shivajinagar': { lat: 18.5308, lng: 73.8474 },
+  'kothrud': { lat: 18.5074, lng: 73.8077 },
+  'hinjewadi': { lat: 18.5913, lng: 73.7389 },
+  'viman': { lat: 18.5679, lng: 73.9143 },
+  'kalyani': { lat: 18.5463, lng: 73.9033 },
+  'hadapsar': { lat: 18.5089, lng: 73.9260 },
+  'camp': { lat: 18.5133, lng: 73.8767 },
+  'swargate': { lat: 18.5018, lng: 73.8636 },
+};
+
 export default function SafeJourneyMode({ onNavigateToMap, onBack }: SafeJourneyModeProps) {
   const [startQuery, setStartQuery] = useState('Shivajinagar Station, Pune');
   const [destQuery, setDestQuery] = useState('Deccan Gymkhana, Pune');
   const [mode, setMode] = useState('Safe Journey');
   const [checkInMinutes, setCheckInMinutes] = useState(15);
-  
-  const startLat = 18.5308;
-  const startLng = 73.8474;
-  const destLat = 18.5162;
-  const destLng = 73.8415;
+  const [startCoords, setStartCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const handleStartTrip = () => {
+    let lat_s = 18.5308;
+    let lng_s = 73.8474;
+    if (startCoords) {
+      lat_s = startCoords.lat;
+      lng_s = startCoords.lng;
+    } else {
+      const queryLower = startQuery.toLowerCase();
+      for (const k in PUNE_PRESETS) {
+        if (queryLower.includes(k)) {
+          lat_s = PUNE_PRESETS[k].lat;
+          lng_s = PUNE_PRESETS[k].lng;
+          break;
+        }
+      }
+    }
+
+    let lat_d = 18.5162;
+    let lng_d = 73.8415;
+    const queryLowerD = destQuery.toLowerCase();
+    for (const k in PUNE_PRESETS) {
+      if (queryLowerD.includes(k)) {
+        lat_d = PUNE_PRESETS[k].lat;
+        lng_d = PUNE_PRESETS[k].lng;
+        break;
+      }
+    }
+
     onNavigateToMap({
-      startLat,
-      startLng,
-      destLat,
-      destLng,
+      startLat: lat_s,
+      startLng: lng_s,
+      destLat: lat_d,
+      destLng: lng_d,
       mode,
       checkInMinutes
     });
@@ -61,13 +97,33 @@ export default function SafeJourneyMode({ onNavigateToMap, onBack }: SafeJourney
 
         <div className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider">Starting Location</label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider">Starting Location</label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const c = await locationService.getCurrentLocation();
+                    setStartCoords(c);
+                    setStartQuery("My Location (" + c.lat.toFixed(4) + ", " + c.lng.toFixed(4) + ")");
+                  } catch (e: any) {
+                    alert(e.message || "Failed to get location");
+                  }
+                }}
+                className="text-[10px] text-sky-400 hover:text-sky-300 transition-colors font-bold underline"
+              >
+                Use Current Location
+              </button>
+            </div>
             <div className="relative">
               <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-sky-500" />
               <input
                 type="text"
                 value={startQuery}
-                onChange={(e) => setStartQuery(e.target.value)}
+                onChange={(e) => {
+                  setStartQuery(e.target.value);
+                  setStartCoords(null); // Clear coordinates override if user types manually
+                }}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#0f172a]/60 border border-gray-800 rounded-xl text-xs text-white outline-none focus:border-sky-500"
               />
             </div>

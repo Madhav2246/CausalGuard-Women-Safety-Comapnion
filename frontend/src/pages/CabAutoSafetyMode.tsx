@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Car, ShieldAlert, CheckCircle, Navigation } from 'lucide-react';
 import { api } from '../api';
+import { locationService } from '../services/locationService';
 
 interface CabAutoSafetyModeProps {
   onBack: () => void;
@@ -24,11 +25,21 @@ export default function CabAutoSafetyMode({ onBack, onTriggerSOS, onTriggerSafeC
     setLoading(true);
 
     try {
+      let start_lat = 18.5308;
+      let start_lng = 73.8474;
+      try {
+        const coords = await locationService.getCurrentLocation();
+        start_lat = coords.lat;
+        start_lng = coords.lng;
+      } catch (errGPS) {
+        console.warn("Could not get GPS for starting cab: ", errGPS);
+      }
+      
       const res = await api.cab.startMonitoring({
         vehicle_number: vehicleNo,
         driver_name: driverName,
-        start_lat: 18.5308,
-        start_lng: 73.8474,
+        start_lat: start_lat,
+        start_lng: start_lng,
         dest_lat: 18.5162,
         dest_lng: 73.8415
       });
@@ -44,15 +55,17 @@ export default function CabAutoSafetyMode({ onBack, onTriggerSOS, onTriggerSafeC
   const handleSimulateDeviation = async () => {
     if (!activeTrip) return;
     try {
+      const current_lat = activeTrip.start_lat + 0.015;
+      const current_lng = activeTrip.start_lng + 0.015;
       const res = await api.cab.checkDeviation({
         journey_id: activeTrip.id,
-        current_lat: 18.5000,
-        current_lng: 73.7900
+        current_lat: current_lat,
+        current_lng: current_lng
       });
 
       if (res.deviation_detected) {
-        setDeviationStatus('Route Deviation Warning!');
-        onTriggerSafeCheck("Cab Route Deviation");
+        setDeviationStatus('Route Deviation Warning! (Simulated)');
+        onTriggerSafeCheck("Cab Route Deviation (Simulation)");
       } else {
         setDeviationStatus('Alignment Normal');
       }
@@ -166,7 +179,7 @@ export default function CabAutoSafetyMode({ onBack, onTriggerSOS, onTriggerSafeC
                 className="py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-colors flex items-center justify-center space-x-2"
               >
                 <ShieldAlert className="w-4 h-4" />
-                <span>Simulate Deviation</span>
+                <span>Simulate Deviation (Demo)</span>
               </button>
               <button
                 onClick={handleEndTrip}

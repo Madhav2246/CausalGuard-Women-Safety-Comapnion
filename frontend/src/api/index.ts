@@ -110,6 +110,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ command, language }),
     }),
+    riskAnalysis: (data: any) => request<any>("/api/voice/risk-analysis", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   },
 
   // Emergency & Police

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, ArrowLeft, Volume2, Globe, Send, MessageSquare, ShieldAlert } from 'lucide-react';
+import { Mic, ArrowLeft, Volume2, Globe, Send, MessageSquare, ShieldAlert, Shield } from 'lucide-react';
 import { api } from '../api';
+import { speechService } from '../services/speechService';
 
 interface VoiceAssistantPageProps {
   onBack: () => void;
@@ -13,68 +14,40 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
   const [backendResponse, setBackendResponse] = useState<any>(null);
-  const [recognition, setRecognition] = useState<any>(null);
+  const [voiceRisk, setVoiceRisk] = useState<any>(null);
+  const [voiceMonitorActive, setVoiceMonitorActive] = useState(() => {
+    return localStorage.getItem("voice_monitor_active") === "true";
+  });
+
+  const handleToggleMonitor = (val: boolean) => {
+    setVoiceMonitorActive(val);
+    localStorage.setItem("voice_monitor_active", val ? "true" : "false");
+  };
 
   useEffect(() => {
-    // Initialize Web Speech Recognition if available
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const rec = new SpeechRecognition();
-    rec.continuous = false;
-    rec.interimResults = false;
-    
-    // Match language code
-    const langCodes: Record<string, string> = {
-      'English': 'en-US',
-      'Hindi': 'hi-IN',
-      'Telugu': 'te-IN',
-      'Tamil': 'ta-IN',
-      'Kannada': 'kn-IN',
-      'Malayalam': 'ml-IN',
-      'Marathi': 'mr-IN',
-      'Bengali': 'bn-IN'
-    };
-    
-    rec.lang = langCodes[selectedLang] || 'en-US';
-
-    rec.onstart = () => {
-      setIsListening(true);
-      setTranscribedText('Listening...');
-    };
-
-    rec.onerror = (e: any) => {
-      console.error(e);
-      setIsListening(false);
-      setTranscribedText('Speech error. Try fallback typed input.');
-    };
-
-    rec.onend = () => {
-      setIsListening(false);
-    };
-
-    rec.onresult = (event: any) => {
-      const text = event.results[0][0].transcript;
-      setTranscribedText(text);
-      submitCommand(text, selectedLang);
-    };
-
-    setRecognition(rec);
-
-    // Cleanup: stop the recognition session when language changes or component unmounts
     return () => {
-      try {
-        rec.abort();
-      } catch (_) {}
+      speechService.stop();
+      speechService.stopListening();
     };
-  }, [selectedLang]);
+  }, []);
 
   const startSpeechListen = () => {
-    if (recognition) {
-      recognition.start();
-    } else {
-      setTranscribedText('Browser Speech API not supported. Type your command below.');
-    }
+    setIsListening(true);
+    setTranscribedText('Listening...');
+    speechService.startListening(
+      selectedLang,
+      (text) => {
+        setTranscribedText(text);
+        submitCommand(text, selectedLang);
+      },
+      () => {
+        setIsListening(false);
+      },
+      (err) => {
+        setIsListening(false);
+        setTranscribedText(`Error: ${err.message}. Try typing instead.`);
+      }
+    );
   };
 
   const handleTextSubmit = (e: React.FormEvent) => {
@@ -87,31 +60,25 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
 
   const submitCommand = async (text: string, lang: string) => {
     try {
+      // 1. Submit voice command to supervisor graph
       const res = await api.voice.sendCommand(text, lang);
       setBackendResponse(res);
 
-      // Perform text-to-speech fallback
-      if ('speechSynthesis' in window) {
-        // Stop current speech
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(res.response_text);
-        
-        // Match voice language
-        const langCodes: Record<string, string> = {
-          'English': 'en-US',
-          'Hindi': 'hi-IN',
-          'Telugu': 'te-IN',
-          'Tamil': 'ta-IN',
-          'Kannada': 'kn-IN',
-          'Malayalam': 'ml-IN',
-          'Marathi': 'mr-IN',
-          'Bengali': 'bn-IN'
-        };
-        utterance.lang = langCodes[lang] || 'en-US';
-        window.speechSynthesis.speak(utterance);
+      // 2. Perform voice risk analysis
+      try {
+        const riskRes = await api.voice.riskAnalysis({
+          transcript: text,
+          language: lang
+        });
+        setVoiceRisk(riskRes);
+      } catch (errRisk) {
+        console.warn("Voice risk analysis api failed", errRisk);
       }
 
-      // Execute matched action inside parent Router/State
+      // 3. TTS speak response text
+      await speechService.speak(res.response_text, lang);
+
+      // 4. Trigger matched actions
       if (res.intent !== 'unknown') {
         setTimeout(() => {
           onExecuteAction(res.intent, res.data);
@@ -123,7 +90,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
   };
 
   const quickCommands = [
-    { text: "I feel unsafe", label: "Trigger SOS" },
+    { text: "I feel unsafe, someone is following me", label: "Trigger SOS" },
     { text: "Start fake call", label: "Fake Call" },
     { text: "Start safe route to home", label: "Navigation" },
     { text: "Start health mode", label: "Health Route" }
@@ -143,7 +110,7 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
 
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-purple-500/10 border border-purple-500/25 rounded-xl animate-pulse">
+            <div className="p-2.5 bg-purple-500/10 border border-purple-500/25 rounded-xl">
               <Mic className="w-6 h-6 text-purple-400" />
             </div>
             <div>
@@ -152,7 +119,6 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
             </div>
           </div>
 
-          {/* Language selector */}
           <div className="flex items-center space-x-2 bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-gray-300">
             <Globe className="w-4 h-4 text-purple-400" />
             <select
@@ -167,13 +133,26 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
           </div>
         </div>
 
+        {/* Voice Monitor Opt-In */}
+        <div className="mb-6 p-4 bg-purple-900/10 border border-purple-950 rounded-2xl flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-bold text-purple-400">Continuous Voice Safety Monitor</h4>
+            <p className="text-[10px] text-gray-400 mt-0.5">Periodically checks your voice for fear/stress during active journeys.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={voiceMonitorActive}
+            onChange={(e) => handleToggleMonitor(e.target.checked)}
+            className="w-5 h-5 accent-purple-500 cursor-pointer"
+          />
+        </div>
+
         <div className="flex flex-col items-center justify-center my-6 space-y-6">
-          {/* Big Microphone button */}
           <button
-            onClick={startSpeechListen}
+            onClick={isListening ? () => speechService.stopListening() : startSpeechListen}
             className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
               isListening 
-                ? 'bg-rose-500 text-white animate-ping shadow-[0_0_30px_rgba(244,63,94,0.4)]'
+                ? 'bg-rose-500 text-white animate-pulse shadow-[0_0_30px_rgba(244,63,94,0.4)]'
                 : 'bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/30'
             }`}
           >
@@ -184,7 +163,6 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
             {isListening ? 'Speak your command now...' : 'Click micro-button to talk'}
           </span>
 
-          {/* Equalizer animation when listening */}
           {isListening && (
             <div className="flex space-x-1 justify-center items-center h-6">
               {[1, 2, 3, 4, 5].map(i => (
@@ -200,6 +178,41 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
                 <span className="font-bold text-gray-400 block mb-0.5">You Spoke ({selectedLang}):</span>
                 <p className="text-gray-200 font-mono italic">"{transcribedText}"</p>
               </div>
+            </div>
+          )}
+
+          {/* Voice Risk Analytics Result */}
+          {voiceRisk && (
+            <div className="w-full p-5 bg-rose-950/10 border border-rose-900/20 rounded-2xl space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-rose-400">Voice Emotion Analysis</span>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                  voiceRisk.risk_level === 'High' ? 'bg-red-500/10 text-red-400 border border-red-500/25' :
+                  voiceRisk.risk_level === 'Medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/25' :
+                  'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                }`}>
+                  Risk: {voiceRisk.voice_risk_score} ({voiceRisk.risk_level})
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
+                <div className="bg-slate-900 p-2 rounded-xl">
+                  <span className="text-gray-400 block">Fear</span>
+                  <span className="font-bold text-white">{voiceRisk.fear_score}%</span>
+                </div>
+                <div className="bg-slate-900 p-2 rounded-xl">
+                  <span className="text-gray-400 block">Anxiety</span>
+                  <span className="font-bold text-white">{voiceRisk.anxiety_score}%</span>
+                </div>
+                <div className="bg-slate-900 p-2 rounded-xl">
+                  <span className="text-gray-400 block">Stress</span>
+                  <span className="font-bold text-white">{voiceRisk.stress_score}%</span>
+                </div>
+                <div className="bg-slate-900 p-2 rounded-xl">
+                  <span className="text-gray-400 block">Calm</span>
+                  <span className="font-bold text-white">{voiceRisk.calm_score}%</span>
+                </div>
+              </div>
+              <p className="text-xs text-gray-300 font-medium">Recommended Action: {voiceRisk.recommended_action}</p>
             </div>
           )}
 
@@ -222,7 +235,6 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
           )}
         </div>
 
-        {/* Fallback Form */}
         <form onSubmit={handleTextSubmit} className="flex space-x-2 border-t border-slate-900/60 pt-6">
           <input
             type="text"
@@ -239,7 +251,6 @@ export default function VoiceAssistantPage({ onBack, onExecuteAction }: VoiceAss
           </button>
         </form>
 
-        {/* Shortcuts chips */}
         <div className="mt-4">
           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2">Simulate command shortcuts</span>
           <div className="flex flex-wrap gap-2">

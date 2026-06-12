@@ -54,36 +54,40 @@ def submit_journey_feedback(
 @router.get("/community-signals")
 def get_community_signals(db: Session = Depends(get_db)):
     feedbacks_count = db.query(Feedback).count()
-    accurate_predictions_pct = 0.0
-    incident_free_pct = 100.0
+    
+    if feedbacks_count == 0:
+        return {
+            "anonymization_note": "Community safety learning uses anonymized feedback. Personal location history is not shared.",
+            "federated_status": "No community feedback yet. Be the first to contribute.",
+            "total_anonymized_samples": 0,
+            "metrics": {
+                "model_accuracy": "N/A",
+                "incident_free_commutes_pct": "100%",
+                "active_sector_overrides": []
+            }
+        }
+        
+    accurate_count = db.query(Feedback).filter(Feedback.risk_accurate == True).count()
+    incident_count = db.query(Feedback).filter(Feedback.incident_happened == True).count()
+    accurate_predictions_pct = round((accurate_count / feedbacks_count) * 100, 1)
+    incident_free_pct = round(((feedbacks_count - incident_count) / feedbacks_count) * 100, 1)
 
-    if feedbacks_count > 0:
-        accurate_count = db.query(Feedback).filter(Feedback.risk_accurate == True).count()
-        incident_count = db.query(Feedback).filter(Feedback.incident_happened == True).count()
-        accurate_predictions_pct = round((accurate_count / feedbacks_count) * 100, 1)
-        incident_free_pct = round(((feedbacks_count - incident_count) / feedbacks_count) * 100, 1)
-    else:
-        accurate_predictions_pct = 92.5
-        incident_free_pct = 99.1
+    overrides = []
+    feedbacks_with_comments = db.query(Feedback).filter(Feedback.comments != "").all()
+    for f in feedbacks_with_comments:
+        overrides.append({
+            "sector": f"Journey Sector #{f.journey_id}",
+            "reason": f.comments,
+            "risk_modifier": -15 if f.safe_rating >= 4 else +15
+        })
 
     return {
         "anonymization_note": "Community safety learning uses anonymized feedback. Personal location history is not shared.",
         "federated_status": "Synchronized",
-        "total_anonymized_samples": feedbacks_count + 142,
+        "total_anonymized_samples": feedbacks_count,
         "metrics": {
             "model_accuracy": f"{accurate_predictions_pct}%",
             "incident_free_commutes_pct": f"{incident_free_pct}%",
-            "active_sector_overrides": [
-                {
-                    "sector": "Shivajinagar Sector 4",
-                    "reason": "Aggregated user reports of improved streetlighting.",
-                    "risk_modifier": -15
-                },
-                {
-                    "sector": "Deccan Gymkhana Lanes",
-                    "reason": "Anonymized signals indicating low evening foot traffic.",
-                    "risk_modifier": +10
-                }
-            ]
+            "active_sector_overrides": overrides
         }
     }

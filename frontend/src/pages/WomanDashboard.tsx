@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { 
   Compass, Mic, AlertOctagon, Users, Car, Heart, ShieldCheck, 
   BookOpen, Info, Shield, Award, FolderHeart, Settings, HelpCircle,
-  Battery, ShieldCheck as ShieldCheckIcon, Bot, Database
+  Battery, ShieldCheck as ShieldCheckIcon, Bot
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -72,23 +72,23 @@ export default function WomanDashboard({
     {
       id: 'safe-journey',
       title: 'Start Safe Journey',
-      description: 'Causal risk-aware route navigation matching ambient lighting & crowd densities.',
+      description: 'Plans routes matching ambient lighting & crowd densities. Uses browser GPS (real-time), OSRM public routing, and News API caution flags. Fallback Pune routes are simulated.',
       icon: Compass,
       color: 'border-sky-500/20 hover:border-sky-500/50 text-sky-400',
-      badge: 'Proactive'
+      badge: 'GPS & Routes'
     },
     {
       id: 'voice-assistant',
       title: 'Voice Assistant',
-      description: 'Multilingual speech command navigation. Supporting regional dialects.',
+      description: 'Hands-free speech commands routing safety actions. Uses browser speech recognition (real-time) and backend Gemini parser. Features voice safety check reminders.',
       icon: Mic,
       color: 'border-purple-500/20 hover:border-purple-500/50 text-purple-400',
-      badge: 'Speech'
+      badge: 'Speech Synth'
     },
     {
       id: 'cab-safety',
       title: 'Cab/Auto Safety',
-      description: 'Trip route deviation checks, driver logs, and automatic check-in prompts.',
+      description: 'Tracks trip telemetry against route geometry. Auto-triggers warning check if cab deviates >500m. Contains manual route deviation simulation controls for demo.',
       icon: Car,
       color: 'border-amber-500/20 hover:border-amber-500/50 text-amber-400',
       badge: 'Commute'
@@ -96,7 +96,7 @@ export default function WomanDashboard({
     {
       id: 'health-safety',
       title: 'Health Safety',
-      description: 'Clinics & pharmacy proximity routing overlays. Support reminders.',
+      description: 'Prioritizes safety routes passing 24/7 medical centers & pharmacies. Medicine notifications are stored and fired locally. Support dashboard overlays are real-time.',
       icon: Heart,
       color: 'border-emerald-500/20 hover:border-emerald-500/50 text-emerald-400',
       badge: 'Wellness'
@@ -104,31 +104,31 @@ export default function WomanDashboard({
     {
       id: 'digital-safety',
       title: 'Digital Safety',
-      description: 'Online text harassment checking, confidence classifiers, and support.',
+      description: 'Threat text analyzer. Uses Gemini security prompt with 4s timeout or local keyword fallbacks. Generates clear block and cyber-crime reporting action advisories.',
       icon: ShieldCheck,
       color: 'border-pink-500/20 hover:border-pink-500/50 text-pink-400',
-      badge: 'Cyber'
+      badge: 'Cyber Safety'
     },
     {
       id: 'campus-safety',
       title: 'Campus/Workplace',
-      description: 'Hostel late-timers, buddy coordinates, and location checks.',
+      description: 'Late-timer hostel locks & Buddy tracking. Automatically monitors check-in warning timers and schedules emergency check alerts if safe-word confirmation is pending.',
       icon: BookOpen,
       color: 'border-indigo-500/20 hover:border-indigo-500/50 text-indigo-400',
-      badge: 'Office'
+      badge: 'Timers'
     },
     {
       id: 'evidence-locker',
       title: 'Evidence Locker',
-      description: 'Consent-based local logs, vehicle notes, and screenshot lockers.',
+      description: 'Secure local depository for ride notes, audio snippets, vehicle numbers, and incident records. All files are stored directly on-device in SQLite database.',
       icon: FolderHeart,
       color: 'border-teal-500/20 hover:border-teal-500/50 text-teal-400',
-      badge: 'Consent'
+      badge: 'Encrypted'
     },
     {
       id: 'contacts',
       title: 'Trusted Contacts',
-      description: 'Manage guardians, links, and invitation trackers.',
+      description: 'Manage guardian link invites, consent preferences, and invitation trackers. Simulates SMS code delivery and verifies guardian acceptance parameters.',
       icon: Users,
       color: 'border-blue-500/20 hover:border-blue-500/50 text-blue-400',
       badge: 'Guardians'
@@ -136,7 +136,7 @@ export default function WomanDashboard({
     {
       id: 'privacy',
       title: 'Privacy Settings',
-      description: 'History purges, safe words, and data consent preferences.',
+      description: 'Manage data consent preferences, toggle safe-word monitoring triggers, and purge local tracking logs instantly. Real-time local database control.',
       icon: Settings,
       color: 'border-slate-500/20 hover:border-slate-500/50 text-slate-400',
       badge: 'Local-First'
@@ -144,26 +144,10 @@ export default function WomanDashboard({
     {
       id: 'support',
       title: 'Support Center',
-      description: 'Direct dial emergency help hotlines, police links, and legal aid.',
+      description: 'Quick-access legal aid guidelines and direct dial buttons for women protection services (112, 181). Legal queries run internal RAG matching dynamically.',
       icon: HelpCircle,
       color: 'border-zinc-500/20 hover:border-zinc-500/50 text-zinc-400',
       badge: 'Helplines'
-    },
-    {
-      id: 'multi-agent-console',
-      title: 'Multi-Agent Console',
-      description: 'Trace Gemini supervisor decision routing and threat assessments.',
-      icon: Bot,
-      color: 'border-purple-500/20 hover:border-purple-500/50 text-purple-400',
-      badge: 'Agent Tech'
-    },
-    {
-      id: 'rag-sources',
-      title: 'RAG Knowledge Base',
-      description: 'View LlamaIndex vector store stats and query legal aid sources.',
-      icon: Database,
-      color: 'border-indigo-500/20 hover:border-indigo-500/50 text-indigo-400',
-      badge: 'AI RAG'
     }
   ];
 
@@ -284,11 +268,21 @@ export default function WomanDashboard({
         })}
       </div>
 
+      <div className="mt-8 flex justify-center">
+        <button
+          onClick={() => onNavigate('multi-agent-console')}
+          className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-bold text-purple-400 flex items-center space-x-2 transition-colors shadow-sm"
+        >
+          <Bot className="w-4 h-4 text-purple-400" />
+          <span>Judge AI Trace / Multi-Agent Trace</span>
+        </button>
+      </div>
+
       <div className="mt-10 p-5 bg-[#0f172a]/30 border border-slate-900 rounded-3xl text-xs text-gray-500 flex items-start space-x-3.5">
         <Info className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-bold text-gray-400 block mb-0.5">Disclaimer and Safety Notice</span>
-          CausalGuard is a prevention-first well-being assistance app. It does not guarantee physical rescue or medical diagnosis. Location tracking is fully controlled by the user. Guardians can only track when explicitly permitted.
+          CausalGuard is a prevention-first well-being assistance app. It does not guarantee physical rescue or medical diagnosis. Location tracking is fully controlled by the user. Guardians can only track when explicitly permitted. All simulated features (ID check, dispatcher dispatch, etc.) are labeled as simulations.
         </div>
       </div>
     </div>
