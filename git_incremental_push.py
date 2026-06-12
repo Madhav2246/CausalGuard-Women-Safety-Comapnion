@@ -4,8 +4,8 @@ import time
 import random
 
 REPO_URL = "https://github.com/Madhav2246/CausalGuard-Women-Safety-Comapnion.git"
-MIN_SLEEP_SECONDS = 180  # 3 minutes (180s)
-MAX_SLEEP_SECONDS = 480  # 8 minutes (480s)
+MIN_SLEEP_SECONDS = 90   # 1m 30s — keeps total under 1 hour for 29 commits
+MAX_SLEEP_SECONDS = 120  # 2m 00s — avg 105s × 28 gaps = ~49 min + push time
 
 # Define the step-by-step commits to make a realistic, incremental git history
 commits = [
