@@ -255,6 +255,8 @@ export default function App() {
             destLng={mapParams.destLng}
             mode={mapParams.mode}
             checkInMinutes={mapParams.checkInMinutes}
+            startName={mapParams.startName}
+            destName={mapParams.destName}
             onBack={(journeyId) => {
               setFeedbackJourneyId(journeyId || activeJourneyId);
               setCurrentPage('woman-dashboard');

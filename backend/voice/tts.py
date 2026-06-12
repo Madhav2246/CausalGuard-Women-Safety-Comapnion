@@ -9,7 +9,8 @@ TTS_MODEL = None
 def init_tts():
     global TTS_MODEL
     try:
-        from TTS.api import TTS
+        import importlib
+        TTS = importlib.import_module("TTS.api").TTS
         logger.info("Loading XTTS model...")
         # Load small/fast model for demo
         TTS_MODEL = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2")

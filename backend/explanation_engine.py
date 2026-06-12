@@ -5,30 +5,49 @@ def generate_causal_explanation(
     factors: list,
     destination: str = "your destination"
 ) -> str:
+    # Separate positive and negative factors
+    negatives = [f.split(" (")[0] for f in factors if "+" in f]
+    positives = [f.split(" (")[0] for f in factors if "-" in f]
+
+    neg_str = ", and ".join(negatives) if negatives else ""
+    pos_str = ", and ".join(positives) if positives else ""
+
     if risk_level == "Low":
-        explanation = (
-            f"Route '{route_name}' to {destination} is classified as Low Risk ({risk_score}/100). "
-            f"The route has high visibility, adequate street lighting, active pedestrian movement, and "
-            f"remains close to rescue points like police stations or hospitals."
-        )
+        explanation = f"Route '{route_name}' to {destination} is classified as Low Risk ({risk_score}/100). "
+        if pos_str:
+            explanation += f"Safety indicators are strong: it features {pos_str.lower()}. "
+        else:
+            explanation += "The route has good public visibility, adequate lighting, and active pedestrian presence. "
+        
+        if neg_str:
+            explanation += f"Keep in mind there is minor exposure to: {neg_str.lower()}."
+        else:
+            explanation += "No significant risk factors were detected."
+            
     elif risk_level == "Medium":
-        reasons = ", ".join([f.split(" (+")[0] for f in factors if "+" in f])
-        if not reasons:
-            reasons = "minor localized safety caution markers"
-        explanation = (
-            f"Route '{route_name}' is classified as Medium Risk ({risk_score}/100) primarily due to: {reasons}. "
-            f"While passable, we suggest notifying your guardian and ensuring your phone's battery is above 20%. "
-            f"Choosing a slightly longer route on main roads could reduce risk."
-        )
-    else:
-        reasons = ", and ".join([f.split(" (+")[0] for f in factors if "+" in f])
-        if not reasons:
-            reasons = "unfavorable lighting conditions and low pedestrian crowd density"
-        explanation = (
-            f"Route '{route_name}' is classified as High Risk ({risk_score}/100) because: {reasons}. "
-            f"It is highly recommended that you take an alternative route or start guardian tracking. "
-            f"Avoiding isolated lanes and low-light paths reduces potential exposure to hazards."
-        )
+        explanation = f"Route '{route_name}' to {destination} is classified as Medium Risk ({risk_score}/100). "
+        if neg_str:
+            explanation += f"This is primarily due to safety cautions: {neg_str}. "
+        else:
+            explanation += "This is due to localized safety markers. "
+            
+        if pos_str:
+            explanation += f"On the positive side, it offers: {pos_str.lower()}. "
+            
+        explanation += "We suggest notifying your guardian and ensuring your phone remains charged."
+        
+    else: # High
+        explanation = f"Route '{route_name}' to {destination} is classified as High Risk ({risk_score}/100). "
+        if neg_str:
+            explanation += f"This is due to critical factors: {neg_str}. "
+        else:
+            explanation += "The route is highly isolated or lacks essential lighting. "
+            
+        if pos_str:
+            explanation += f"Despite some support from: {pos_str.lower()}, "
+            
+        explanation += "it is highly recommended to take an alternative route or activate Guardian live tracking."
+
     return explanation
 
 def generate_what_if_scenarios(

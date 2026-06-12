@@ -20,6 +20,11 @@ POLICE_STATIONS = [
     {"name": "Shivajinagar Police Station", "lat": 18.5308, "lng": 73.8474},
     {"name": "Kothrud Police Station", "lat": 18.5074, "lng": 73.8077},
     {"name": "Cantonment Police Station", "lat": 18.5089, "lng": 73.8791},
+    # Hyderabad Fallbacks for Demo
+    {"name": "Punjagutta Police Station", "lat": 17.4264, "lng": 78.4534},
+    {"name": "Ameerpet Police Outpost", "lat": 17.4370, "lng": 78.4485},
+    {"name": "Madhapur Police Station", "lat": 17.4485, "lng": 78.3738},
+    {"name": "Gachibowli Police Station", "lat": 17.4400, "lng": 78.3480},
 ]
 
 HEALTHCARE_FACILITIES = [
@@ -28,6 +33,10 @@ HEALTHCARE_FACILITIES = [
     {"name": "Sahyadri Super Speciality Hospital", "lat": 18.5150, "lng": 73.8335, "type": "Hospital"},
     {"name": "Noble Pharmacy Shivajinagar", "lat": 18.5280, "lng": 73.8490, "type": "Pharmacy"},
     {"name": "Apollo Pharmacy Kothrud", "lat": 18.5090, "lng": 73.8100, "type": "Pharmacy"},
+    # Hyderabad Fallbacks for Demo
+    {"name": "NIMS Hospital Punjagutta", "lat": 17.4250, "lng": 78.4550, "type": "Hospital"},
+    {"name": "Apollo Clinic Ameerpet", "lat": 17.4380, "lng": 78.4490, "type": "Hospital"},
+    {"name": "MaxCure Hospital Madhapur", "lat": 17.4480, "lng": 78.3750, "type": "Hospital"},
 ]
 
 def calculate_point_risk(

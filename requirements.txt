@@ -14,3 +14,4 @@ llama-index>=0.10.43
 llama-index-llms-gemini>=0.1.7
 llama-index-embeddings-huggingface>=0.2.0
 requests==2.32.3
+numpy==1.26.4

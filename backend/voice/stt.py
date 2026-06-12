@@ -9,7 +9,8 @@ WHISPER_MODEL = None
 def init_whisper():
     global WHISPER_MODEL
     try:
-        import whisper
+        import importlib
+        whisper = importlib.import_module("whisper")
         logger.info("Loading Whisper model...")
         WHISPER_MODEL = whisper.load_model("base")
         logger.info("Whisper model loaded successfully.")

@@ -262,6 +262,24 @@ class RAGSource(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migration for sqlite database when news_alerts table exists but lacks is_live column
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT is_live FROM news_alerts LIMIT 1"))
+    except Exception:
+        db.rollback()
+        try:
+            from sqlalchemy import text
+            db.execute(text("ALTER TABLE news_alerts ADD COLUMN is_live BOOLEAN DEFAULT 0"))
+            db.commit()
+            print("Database migration: Added missing 'is_live' column to 'news_alerts' table.")
+        except Exception as e:
+            print(f"Database migration failed: {e}")
+            db.rollback()
+    finally:
+        db.close()
 
 def get_db():
     db = SessionLocal()

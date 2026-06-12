@@ -147,11 +147,19 @@ class RouteRecommendRequest(BaseModel):
     dest_lng: float
     health_mode_active: Optional[bool] = False
     campus_mode_active: Optional[bool] = False
+    start_name: Optional[str] = None
+    dest_name: Optional[str] = None
+
+class WhatIfScenario(BaseModel):
+    condition: str
+    impact: str
+    reason: str
 
 class RouteRecommendResponse(BaseModel):
     routes: List[RouteOption]
     explanation: str
     fallback_used: Optional[bool] = False
+    what_if: Optional[List[WhatIfScenario]] = None
 
 class RouteRiskScoreRequest(BaseModel):
     lat: float

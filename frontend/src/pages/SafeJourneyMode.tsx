@@ -10,11 +10,14 @@ interface SafeJourneyModeProps {
     destLng: number;
     mode: string;
     checkInMinutes: number;
+    startName?: string;
+    destName?: string;
   }) => void;
   onBack: () => void;
 }
 
-const PUNE_PRESETS: { [key: string]: { lat: number; lng: number } } = {
+const LOCATION_PRESETS: { [key: string]: { lat: number; lng: number } } = {
+  // Pune Presets
   'deccan': { lat: 18.5162, lng: 73.8415 },
   'shivajinagar': { lat: 18.5308, lng: 73.8474 },
   'kothrud': { lat: 18.5074, lng: 73.8077 },
@@ -24,6 +27,45 @@ const PUNE_PRESETS: { [key: string]: { lat: number; lng: number } } = {
   'hadapsar': { lat: 18.5089, lng: 73.9260 },
   'camp': { lat: 18.5133, lng: 73.8767 },
   'swargate': { lat: 18.5018, lng: 73.8636 },
+  // Hyderabad Presets
+  'ameerpet': { lat: 17.4375, lng: 78.4482 },
+  'punjagutta': { lat: 17.4265, lng: 78.4530 },
+  'gachibowli': { lat: 17.4401, lng: 78.3489 },
+  'madhapur': { lat: 17.4483, lng: 78.3741 },
+  'secunderabad': { lat: 17.4399, lng: 78.4983 },
+  'begumpet': { lat: 17.4448, lng: 78.4602 },
+  'jubilee': { lat: 17.4312, lng: 78.4068 },
+  'banjara': { lat: 17.4168, lng: 78.4418 },
+};
+
+const geocodeAddress = async (query: string): Promise<{ lat: number; lng: number } | null> => {
+  const queryLower = query.toLowerCase();
+  for (const k in LOCATION_PRESETS) {
+    if (queryLower.includes(k)) {
+      return LOCATION_PRESETS[k];
+    }
+  }
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+      {
+        headers: {
+          'Accept-Language': 'en'
+        }
+      }
+    );
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon)
+      };
+    }
+  } catch (e) {
+    console.error("Geocoding failed: ", e);
+  }
+  return null;
 };
 
 export default function SafeJourneyMode({ onNavigateToMap, onBack }: SafeJourneyModeProps) {
@@ -32,43 +74,48 @@ export default function SafeJourneyMode({ onNavigateToMap, onBack }: SafeJourney
   const [mode, setMode] = useState('Safe Journey');
   const [checkInMinutes, setCheckInMinutes] = useState(15);
   const [startCoords, setStartCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleStartTrip = () => {
-    let lat_s = 18.5308;
-    let lng_s = 73.8474;
-    if (startCoords) {
-      lat_s = startCoords.lat;
-      lng_s = startCoords.lng;
-    } else {
-      const queryLower = startQuery.toLowerCase();
-      for (const k in PUNE_PRESETS) {
-        if (queryLower.includes(k)) {
-          lat_s = PUNE_PRESETS[k].lat;
-          lng_s = PUNE_PRESETS[k].lng;
-          break;
+  const handleStartTrip = async () => {
+    setLoading(true);
+    try {
+      let lat_s = 18.5308;
+      let lng_s = 73.8474;
+      if (startCoords) {
+        lat_s = startCoords.lat;
+        lng_s = startCoords.lng;
+      } else {
+        const coords = await geocodeAddress(startQuery);
+        if (coords) {
+          lat_s = coords.lat;
+          lng_s = coords.lng;
         }
       }
-    }
 
-    let lat_d = 18.5162;
-    let lng_d = 73.8415;
-    const queryLowerD = destQuery.toLowerCase();
-    for (const k in PUNE_PRESETS) {
-      if (queryLowerD.includes(k)) {
-        lat_d = PUNE_PRESETS[k].lat;
-        lng_d = PUNE_PRESETS[k].lng;
-        break;
+      let lat_d = 18.5162;
+      let lng_d = 73.8415;
+      const coords_d = await geocodeAddress(destQuery);
+      if (coords_d) {
+        lat_d = coords_d.lat;
+        lng_d = coords_d.lng;
       }
-    }
 
-    onNavigateToMap({
-      startLat: lat_s,
-      startLng: lng_s,
-      destLat: lat_d,
-      destLng: lng_d,
-      mode,
-      checkInMinutes
-    });
+      onNavigateToMap({
+        startLat: lat_s,
+        startLng: lng_s,
+        destLat: lat_d,
+        destLng: lng_d,
+        mode,
+        checkInMinutes,
+        startName: startQuery,
+        destName: destQuery
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Error resolving coordinates. Please double-check location names.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -203,10 +250,15 @@ export default function SafeJourneyMode({ onNavigateToMap, onBack }: SafeJourney
 
           <button
             onClick={handleStartTrip}
-            className="w-full py-3 bg-sky-500 hover:bg-sky-600 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(14,165,233,0.25)] flex items-center justify-center space-x-2 text-xs"
+            disabled={loading}
+            className={`w-full py-3 text-white font-bold rounded-xl transition-all flex items-center justify-center space-x-2 text-xs ${
+              loading 
+                ? 'bg-slate-700 cursor-not-allowed' 
+                : 'bg-sky-500 hover:bg-sky-600 shadow-[0_0_15px_rgba(14,165,233,0.25)]'
+            }`}
           >
-            <span>Proceed to Safest Route Planner</span>
-            <ArrowRight className="w-4.5 h-4.5" />
+            <span>{loading ? 'Resolving Locations via GPS/Map...' : 'Proceed to Safest Route Planner'}</span>
+            {!loading && <ArrowRight className="w-4.5 h-4.5" />}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { Shield, Compass, Navigation, Eye, User, Phone, CheckCircle, Info, Shiel
 import L from 'leaflet';
 import { api } from '../api';
 import { locationService } from '../services/locationService';
+import { speechService } from '../services/speechService';
 
 interface LiveMapNavigationProps {
   startLat: number;
@@ -14,6 +15,8 @@ interface LiveMapNavigationProps {
   onBack: (journeyId?: number | null) => void;
   onTriggerSOS: () => void;
   onTriggerSafeCheck: (reason: string) => void;
+  startName?: string;
+  destName?: string;
 }
 
 export default function LiveMapNavigation({
@@ -25,7 +28,9 @@ export default function LiveMapNavigation({
   checkInMinutes,
   onBack,
   onTriggerSOS,
-  onTriggerSafeCheck
+  onTriggerSafeCheck,
+  startName,
+  destName
 }: LiveMapNavigationProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -47,12 +52,45 @@ export default function LiveMapNavigation({
   const [lastVoiceCheck, setLastVoiceCheck] = useState<string>('Never');
   const [voiceRiskScore, setVoiceRiskScore] = useState<number | null>(null);
   const [isListeningForSafeWord, setIsListeningForSafeWord] = useState(false);
+  const [whatIf, setWhatIf] = useState<any[]>([]);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Loading Screen States
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [showLoader, setShowLoader] = useState(true);
+  const [apiResolved, setApiResolved] = useState(false);
 
   const activeJourneyIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     activeJourneyIdRef.current = activeJourneyId;
   }, [activeJourneyId]);
+
+  // Loading Step Simulation Loop
+  useEffect(() => {
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      setLoadingStep(prev => {
+        if (prev >= 6) {
+          clearInterval(interval);
+          return 6;
+        }
+        return prev + 1;
+      });
+    }, 450);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync loader completion with API resolution
+  useEffect(() => {
+    if (loadingStep === 6 && apiResolved) {
+      const timeout = setTimeout(() => {
+        setShowLoader(false);
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [loadingStep, apiResolved]);
 
   useEffect(() => {
     api.journey.recommendRoutes({
@@ -61,18 +99,26 @@ export default function LiveMapNavigation({
       dest_lat: destLat,
       dest_lng: destLng,
       health_mode_active: mode === 'Health Safety',
-      campus_mode_active: mode === 'Campus Safety'
+      campus_mode_active: mode === 'Campus Safety',
+      start_name: startName,
+      dest_name: destName
     }).then(res => {
       setRoutes(res.routes);
       setExplanation(res.explanation);
       setFallbackUsed(!!res.fallback_used);
+      if (res.what_if) {
+        setWhatIf(res.what_if);
+      }
       
       const defaultRoute = res.routes.find((r: any) => r.route_id === 'safest');
       if (defaultRoute) {
         setRiskScore(defaultRoute.risk_score);
         setRiskLevel(defaultRoute.risk_level);
       }
-    }).catch(() => {});
+      setApiResolved(true);
+    }).catch(() => {
+      setApiResolved(true);
+    });
 
     api.journey.startJourney({
       start_lat: startLat,
@@ -166,135 +212,213 @@ export default function LiveMapNavigation({
   // 1. Initialize map on mount and clean up on unmount
   useEffect(() => {
     if (mapContainerRef.current && !mapRef.current) {
-      const mapInstance = L.map(mapContainerRef.current).setView([startLat, startLng], 14);
-      mapRef.current = mapInstance;
+      const container = mapContainerRef.current;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap contributors'
-      }).addTo(mapInstance);
+      // Clean up the container's leaflet state if any exists (to prevent "Map container is already initialized" crash)
+      if ((container as any)._leaflet_id) {
+        try {
+          delete (container as any)._leaflet_id;
+        } catch (e) {
+          console.warn("Could not delete _leaflet_id: ", e);
+        }
+      }
 
-      otherMarkersRef.current = L.layerGroup().addTo(mapInstance);
+      const startLatNum = Number(startLat);
+      const startLngNum = Number(startLng);
 
-      api.journey.getNearbyPolice().then(policeList => {
-        policeList.forEach(ps => {
-          if (mapRef.current && otherMarkersRef.current) {
-            L.marker([ps.lat, ps.lng], {
-              icon: L.divIcon({
-                className: 'custom-police-marker',
-                html: `<div class="p-1.5 bg-blue-600 border border-white rounded-lg text-white font-bold text-[9px] shadow-lg flex items-center space-x-1">🛡️<span>${ps.name.split(' ')[0]}</span></div>`,
-                iconSize: [80, 24],
-                iconAnchor: [40, 12]
-              })
-            }).addTo(otherMarkersRef.current).bindPopup(ps.name);
+      if (isNaN(startLatNum) || isNaN(startLngNum)) {
+        console.error("Invalid start coordinates: ", startLat, startLng);
+        return;
+      }
+
+      try {
+        const mapInstance = L.map(container).setView([startLatNum, startLngNum], 14);
+        mapRef.current = mapInstance;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '© OpenStreetMap contributors'
+        }).addTo(mapInstance);
+
+        otherMarkersRef.current = L.layerGroup().addTo(mapInstance);
+
+        api.journey.getNearbyPolice().then(policeList => {
+          if (Array.isArray(policeList)) {
+            policeList.forEach(ps => {
+              if (mapRef.current && otherMarkersRef.current && ps && typeof ps.lat === 'number' && !isNaN(ps.lat) && typeof ps.lng === 'number' && !isNaN(ps.lng)) {
+                try {
+                  L.marker([ps.lat, ps.lng], {
+                    icon: L.divIcon({
+                      className: 'custom-police-marker',
+                      html: `<div class="p-1.5 bg-blue-600 border border-white rounded-lg text-white font-bold text-[9px] shadow-lg flex items-center space-x-1">🛡️<span>${(ps.name || 'Police').split(' ')[0]}</span></div>`,
+                      iconSize: [80, 24],
+                      iconAnchor: [40, 12]
+                    })
+                  }).addTo(otherMarkersRef.current).bindPopup(ps.name || 'Police Station');
+                } catch (e) {
+                  console.warn("Error adding police marker: ", e);
+                }
+              }
+            });
           }
-        });
-      }).catch(() => {});
+        }).catch((e) => console.warn("Failed to get police markers: ", e));
 
-      api.journey.getNearbyHealthcare().then(hcList => {
-        hcList.forEach(hc => {
-          if (mapRef.current && otherMarkersRef.current) {
-            L.marker([hc.lat, hc.lng], {
-              icon: L.divIcon({
-                className: 'custom-hc-marker',
-                html: `<div class="p-1.5 bg-emerald-600 border border-white rounded-lg text-white font-bold text-[9px] shadow-lg flex items-center space-x-1">🏥<span>${hc.name.split(' ')[0]}</span></div>`,
-                iconSize: [80, 24],
-                iconAnchor: [40, 12]
-              })
-            }).addTo(otherMarkersRef.current).bindPopup(hc.name);
+        api.journey.getNearbyHealthcare().then(hcList => {
+          if (Array.isArray(hcList)) {
+            hcList.forEach(hc => {
+              if (mapRef.current && otherMarkersRef.current && hc && typeof hc.lat === 'number' && !isNaN(hc.lat) && typeof hc.lng === 'number' && !isNaN(hc.lng)) {
+                try {
+                  L.marker([hc.lat, hc.lng], {
+                    icon: L.divIcon({
+                      className: 'custom-hc-marker',
+                      html: `<div class="p-1.5 bg-emerald-600 border border-white rounded-lg text-white font-bold text-[9px] shadow-lg flex items-center space-x-1">🏥<span>${(hc.name || 'Clinic').split(' ')[0]}</span></div>`,
+                      iconSize: [80, 24],
+                      iconAnchor: [40, 12]
+                    })
+                  }).addTo(otherMarkersRef.current).bindPopup(hc.name || 'Healthcare Facility');
+                } catch (e) {
+                  console.warn("Error adding healthcare marker: ", e);
+                }
+              }
+            });
           }
-        });
-      }).catch(() => {});
+        }).catch((e) => console.warn("Failed to get healthcare markers: ", e));
 
-      api.news.getSafetyAlerts().then(alerts => {
-        alerts.forEach(alert => {
-          if (mapRef.current && otherMarkersRef.current) {
-            L.marker([alert.lat, alert.lng], {
-              icon: L.divIcon({
-                className: 'custom-news-marker',
-                html: `<div class="p-1.5 bg-amber-500 border border-white rounded-lg text-slate-950 font-extrabold text-[9px] shadow-lg animate-pulse">⚠️ Alert</div>`,
-                iconSize: [50, 24],
-                iconAnchor: [25, 12]
-              })
-            }).addTo(otherMarkersRef.current).bindPopup(alert.title);
+        api.news.getSafetyAlerts().then(alerts => {
+          if (Array.isArray(alerts)) {
+            alerts.forEach(alert => {
+              if (mapRef.current && otherMarkersRef.current && alert && typeof alert.lat === 'number' && !isNaN(alert.lat) && typeof alert.lng === 'number' && !isNaN(alert.lng)) {
+                try {
+                  L.marker([alert.lat, alert.lng], {
+                    icon: L.divIcon({
+                      className: 'custom-news-marker',
+                      html: `<div class="p-1.5 bg-amber-500 border border-white rounded-lg text-slate-950 font-extrabold text-[9px] shadow-lg animate-pulse">⚠️ Alert</div>`,
+                      iconSize: [50, 24],
+                      iconAnchor: [25, 12]
+                    })
+                  }).addTo(otherMarkersRef.current).bindPopup(alert.title || 'Safety Alert');
+                } catch (e) {
+                  console.warn("Error adding alert marker: ", e);
+                }
+              }
+            });
           }
-        });
-      }).catch(() => {});
+        }).catch((e) => console.warn("Failed to get safety alerts: ", e));
 
-      if (typeof destLat === 'number' && !isNaN(destLat) && typeof destLng === 'number' && !isNaN(destLng)) {
-        L.marker([destLat, destLng], {
-          icon: L.divIcon({
-            className: 'custom-dest-marker',
-            html: `<div class="w-8 h-8 rounded-full bg-rose-500 border border-white flex items-center justify-center text-white text-xs shadow-xl font-bold">🏁</div>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-          })
-        }).addTo(mapInstance).bindPopup("Destination");
+        const destLatNum = Number(destLat);
+        const destLngNum = Number(destLng);
+        if (typeof destLatNum === 'number' && !isNaN(destLatNum) && typeof destLngNum === 'number' && !isNaN(destLngNum)) {
+          try {
+            L.marker([destLatNum, destLngNum], {
+              icon: L.divIcon({
+                className: 'custom-dest-marker',
+                html: `<div class="w-8 h-8 rounded-full bg-rose-500 border border-white flex items-center justify-center text-white text-xs shadow-xl font-bold">🏁</div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+              })
+            }).addTo(mapInstance).bindPopup("Destination");
+          } catch (e) {
+            console.warn("Error adding destination marker: ", e);
+          }
+        }
+        setMapReady(true);
+      } catch (err) {
+        console.error("Leaflet map initialization failed: ", err);
       }
     }
 
     return () => {
+      setMapReady(false);
       if (mapRef.current) {
-        mapRef.current.remove();
+        try {
+          mapRef.current.remove();
+        } catch (e) {
+          console.warn("Error during map cleanup: ", e);
+        }
         mapRef.current = null;
         polylineRef.current = null;
         userMarkerRef.current = null;
       }
     };
-  }, []);
+  }, [startLat, startLng, destLat, destLng]);
 
   // 2. Update polyline and user marker when route/coordinates change
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapReady || !mapRef.current) return;
 
-    // Trigger map invalidation to ensure it resizes correctly if container was toggled/resized
-    mapRef.current.invalidateSize();
+    try {
+      // Trigger map invalidation to ensure it resizes correctly if container was toggled/resized
+      mapRef.current.invalidateSize();
+    } catch (e) {
+      console.warn("Leaflet invalidateSize failed: ", e);
+    }
 
     // Render polyline
-    if (routes.length > 0) {
+    if (Array.isArray(routes) && routes.length > 0) {
       if (polylineRef.current) {
-        polylineRef.current.remove();
+        try {
+          polylineRef.current.remove();
+        } catch (e) {
+          console.warn("Error removing polyline: ", e);
+        }
         polylineRef.current = null;
       }
 
-      const activeRoute = routes.find(r => r.route_id === selectedRoute);
-      if (activeRoute && activeRoute.coordinates && activeRoute.coordinates.length > 0) {
+      const activeRoute = routes.find(r => r && r.route_id === selectedRoute);
+      if (activeRoute && Array.isArray(activeRoute.coordinates) && activeRoute.coordinates.length > 0) {
         setRiskScore(activeRoute.risk_score);
         setRiskLevel(activeRoute.risk_level);
 
-        polylineRef.current = L.polyline(activeRoute.coordinates, {
-          color: selectedRoute === 'safest' ? '#10b981' : '#ef4444',
-          weight: 5,
-          opacity: 0.85
-        }).addTo(mapRef.current);
-        
-        try {
-          const bounds = polylineRef.current.getBounds();
-          if (bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
-            mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+        // Double check coordinates are valid arrays of 2 numbers
+        const validCoords = activeRoute.coordinates.filter(
+          (pt: any) => Array.isArray(pt) && pt.length >= 2 && typeof pt[0] === 'number' && !isNaN(pt[0]) && typeof pt[1] === 'number' && !isNaN(pt[1])
+        );
+
+        if (validCoords.length > 0) {
+          try {
+            polylineRef.current = L.polyline(validCoords, {
+              color: selectedRoute === 'safest' ? '#10b981' : '#ef4444',
+              weight: 5,
+              opacity: 0.85
+            }).addTo(mapRef.current);
+            
+            const bounds = polylineRef.current.getBounds();
+            if (bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
+              mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+            }
+          } catch (e) {
+            console.error("Leaflet polyline rendering failed: ", e);
           }
-        } catch (e) {
-          console.warn("Leaflet fitBounds failed: ", e);
         }
       }
     }
 
     // Render user marker
-    if (typeof currentLat === 'number' && !isNaN(currentLat) && typeof currentLng === 'number' && !isNaN(currentLng)) {
+    const currentLatNum = Number(currentLat);
+    const currentLngNum = Number(currentLng);
+    if (typeof currentLatNum === 'number' && !isNaN(currentLatNum) && typeof currentLngNum === 'number' && !isNaN(currentLngNum)) {
       if (userMarkerRef.current) {
-        userMarkerRef.current.setLatLng([currentLat, currentLng]);
+        try {
+          userMarkerRef.current.setLatLng([currentLatNum, currentLngNum]);
+        } catch (e) {
+          console.warn("Error updating user marker position: ", e);
+        }
       } else {
-        userMarkerRef.current = L.marker([currentLat, currentLng], {
-          icon: L.divIcon({
-            className: 'custom-user-marker',
-            html: `<div class="custom-gps-pulsar"></div>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12]
-          })
-        }).addTo(mapRef.current);
+        try {
+          userMarkerRef.current = L.marker([currentLatNum, currentLngNum], {
+            icon: L.divIcon({
+              className: 'custom-user-marker',
+              html: `<div class="custom-gps-pulsar"></div>`,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12]
+            })
+          }).addTo(mapRef.current);
+        } catch (e) {
+          console.error("Error creating user marker: ", e);
+        }
       }
     }
-  }, [routes, selectedRoute, currentLat, currentLng]);
+  }, [routes, selectedRoute, currentLat, currentLng, mapReady]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -354,6 +478,16 @@ export default function LiveMapNavigation({
     }
   };
 
+  const steps = [
+    "📡 Initializing Safe Journey Router...",
+    "🧠 Querying News Intelligence Agent for local alert indexes...",
+    "📚 Retrieving safety directives via RAG Knowledge Agent...",
+    "⚖️ Evaluating streetlighting, isolation, and crowd metrics...",
+    "🛡️ Scanning nearest rescue hubs (police outposts & 24/7 clinics)...",
+    "🔮 Performing causal what-if simulations...",
+    "🗺️ Drafting optimized safe journey vectors..."
+  ];
+
   return (
     <div className="w-full max-w-6xl mx-auto py-6 px-4 min-h-screen flex flex-col md:flex-row gap-6">
       <div className="flex-1 flex flex-col bg-slate-950/60 border border-slate-900 rounded-3xl p-5 backdrop-blur-md relative">
@@ -411,7 +545,46 @@ export default function LiveMapNavigation({
           </div>
         </div>
 
-        <div ref={mapContainerRef} className="w-full h-[380px] md:h-[480px] rounded-2xl relative z-10"></div>
+        <div className="relative w-full h-[380px] md:h-[480px] rounded-2xl overflow-hidden z-10 border border-slate-900">
+          <div ref={mapContainerRef} className="w-full h-full"></div>
+          
+          {showLoader && (
+            <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center z-20 transition-all duration-300">
+              <div className="w-full max-w-sm bg-slate-900/95 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col items-center space-y-4 text-center mx-4">
+                <div className="w-10 h-10 border-3 border-sky-500/10 border-t-sky-400 rounded-full animate-spin"></div>
+                
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-white tracking-wide uppercase">AI Safety Agent Analysis</h4>
+                  <p className="text-[10px] text-sky-400 font-medium animate-pulse">{steps[loadingStep]}</p>
+                </div>
+
+                <div className="w-full max-w-xs bg-slate-950 border border-slate-800/40 rounded-full h-1 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-sky-400 to-purple-500 h-full transition-all duration-300"
+                    style={{ width: `${((loadingStep + 1) / steps.length) * 100}%` }}
+                  ></div>
+                </div>
+
+                <div className="space-y-1 text-left w-full text-[9px] border-t border-slate-800/60 pt-3">
+                  {steps.map((step, idx) => (
+                    <div key={idx} className="flex items-center space-x-2">
+                      {idx < loadingStep ? (
+                        <span className="text-emerald-400 font-bold">✓</span>
+                      ) : idx === loadingStep ? (
+                        <span className="text-sky-400 animate-pulse font-extrabold">▶</span>
+                      ) : (
+                        <span className="text-gray-700">○</span>
+                      )}
+                      <span className={idx <= loadingStep ? "text-gray-300 font-medium" : "text-gray-700"}>
+                        {step.split("...")[0]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="mt-5 p-4 bg-slate-900/50 border border-slate-800 rounded-2xl">
           <span className="text-[10px] font-bold text-sky-400 uppercase tracking-widest block mb-2.5">Hackathon Simulation Controls</span>
@@ -503,18 +676,18 @@ export default function LiveMapNavigation({
               <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">What-If Simulations</span>
             </div>
             <div className="space-y-3.5 text-xs text-gray-300">
-              <div>
-                <span className="font-bold text-gray-400 block mb-0.5">If leaving 3 hours earlier:</span>
-                <p className="text-[10px] text-gray-500 leading-snug">Risk reduces by 25 points. Commute shifts to daytime crowd presence.</p>
-              </div>
-              <div className="border-t border-slate-800/80 pt-2">
-                <span className="font-bold text-gray-400 block mb-0.5">If lighting is improved in dark alley:</span>
-                <p className="text-[10px] text-gray-500 leading-snug">Risk reduces by 20 points. Night visibility safety indices normalize.</p>
-              </div>
-              <div className="border-t border-slate-800/80 pt-2">
-                <span className="font-bold text-gray-400 block mb-0.5">If Guardian live tracking active:</span>
-                <p className="text-[10px] text-gray-500 leading-snug">Response support index reaches maximum. Authorities sync directly.</p>
-              </div>
+              {whatIf && whatIf.length > 0 ? (
+                whatIf.map((item, idx) => (
+                  <div key={idx} className={idx > 0 ? "border-t border-slate-800/80 pt-2" : ""}>
+                    <span className="font-bold text-gray-400 block mb-0.5">{item.condition}:</span>
+                    <p className="text-[10px] text-gray-500 leading-snug">
+                      <span className="text-amber-400 font-semibold">{item.impact}.</span> {item.reason}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[10px] text-gray-500">No simulations available for this route.</p>
+              )}
             </div>
           </div>
         </div>
