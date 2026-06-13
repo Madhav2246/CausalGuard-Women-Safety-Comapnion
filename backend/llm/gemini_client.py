@@ -190,7 +190,7 @@ def generate_agent_response(
         return json.loads(fallback_json)
 
     last_error = None
-    for model_name in ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-pro"]:
+    for model_name in ["models/gemini-2.0-flash", "models/gemini-1.5-flash", "models/gemini-1.5-flash-latest"]:
         try:
             model = genai.GenerativeModel(
                 model_name=model_name,
@@ -206,14 +206,15 @@ def generate_agent_response(
             if json_mode:
                 config["response_mime_type"] = "application/json"
 
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(model.generate_content, prompt, generation_config=config)
-                response = future.result(timeout=5.0)
+            response = model.generate_content(prompt, generation_config=config)
             
             text_resp = response.text.strip()
             if json_mode:
-                return json.loads(text_resp)
+                try:
+                    return json.loads(text_resp)
+                except json.JSONDecodeError:
+                    logger.warning(f"Gemini returned non-JSON response: {text_resp[:200]}. Falling back.")
+                    break  # Fall through to rule-based fallback
             return {"response": text_resp}
         except Exception as e:
             last_error = e

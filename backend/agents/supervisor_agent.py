@@ -40,29 +40,9 @@ Action codes can be:
 """
 
 def run_supervisor(state: AgentState) -> AgentState:
-    # Safely initialize state keys not present in initial inputs
-    if "agent_outputs" not in state or state["agent_outputs"] is None:
+    # Ensure agent_outputs dict exists (other keys are guaranteed by the graph)
+    if not state.get("agent_outputs"):
         state["agent_outputs"] = {}
-    if "intent" not in state:
-        state["intent"] = "unknown"
-    if "final_response" not in state:
-        state["final_response"] = ""
-    if "recommended_action" not in state:
-        state["recommended_action"] = ""
-    if "action" not in state:
-        state["action"] = []
-    if "risk_score" not in state:
-        state["risk_score"] = 0
-    if "risk_level" not in state:
-        state["risk_level"] = "Low"
-    if "emergency_status" not in state:
-        state["emergency_status"] = "safe"
-    if "news_alerts" not in state:
-        state["news_alerts"] = []
-    if "rag_context" not in state:
-        state["rag_context"] = ""
-    if "missing_data_notes" not in state:
-        state["missing_data_notes"] = []
 
     user_msg = state["message"]
     

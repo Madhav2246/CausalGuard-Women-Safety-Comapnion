@@ -34,7 +34,7 @@ def init_rag_index():
         
         # Configure LlamaIndex to use Gemini (try multiple model options if one fails)
         llm = None
-        for model_name in ["models/gemini-1.5-flash", "models/gemini-1.5-flash-latest", "models/gemini-2.0-flash-exp", "models/gemini-pro"]:
+        for model_name in ["models/gemini-2.0-flash", "models/gemini-1.5-flash", "models/gemini-1.5-flash-latest"]:
             try:
                 llm = Gemini(model=model_name, api_key=api_key)
                 logger.info(f"Successfully configured LlamaIndex LLM with model: {model_name}")

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, Alert, User, Journey
 from backend.auth import get_current_user
 from backend.schemas import SOSTrigger, SOSCheckResponse
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/sos", tags=["SOS Emergency"])
 
@@ -30,7 +30,7 @@ def trigger_sos(
         route_details=route_info or "Direct SOS Button Triggered (No Active Route)",
         status="New",
         alert_type="SOS",
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     db.add(alert)
@@ -42,10 +42,10 @@ def trigger_sos(
         from backend.database import Evidence
         evidence = Evidence(
             user_id=current_user.id,
-            title=f"SOS Location Capture - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            title=f"SOS Location Capture - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
             content_type="route",
             description=f"Auto-saved GPS coordinate: ({sos_data.latitude}, {sos_data.longitude}). Route: {route_info or 'N/A'}",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         db.add(evidence)
         db.commit()
@@ -87,7 +87,7 @@ def check_response(
         route_details=f"Auto-Triggered: Unresponsive Check-in. Active Mode: {active_journey.mode if active_journey else 'Unknown'}",
         status="New",
         alert_type="SOS",
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     db.add(alert)
     db.commit()

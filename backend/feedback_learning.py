@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, Feedback, Journey, User
 from backend.auth import get_current_verified_woman
 from backend.schemas import FeedbackCreate
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/feedback", tags=["Continual Learning"])
 
@@ -32,7 +32,7 @@ def submit_journey_feedback(
         incident_happened=feedback.incident_happened,
         crowd_estimate_correct=feedback.crowd_estimate_correct,
         comments=feedback.comments,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     
     db.add(db_feedback)

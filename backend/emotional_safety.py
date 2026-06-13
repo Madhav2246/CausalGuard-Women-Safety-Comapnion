@@ -4,7 +4,7 @@ from backend.database import get_db, User
 from backend.auth import get_current_verified_woman
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/emotional", tags=["Emotional Well-Being"])
 
@@ -25,7 +25,7 @@ def log_mood(
     
     return {
         "status": "success",
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(timezone.utc),
         "disclaimer": "This is a well-being support and stress indicator tool, not a medical or psychological diagnosis.",
         "stress_indicator": f"{log.stress_level}/5",
         "guidance": advice,

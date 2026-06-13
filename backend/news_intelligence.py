@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db, NewsAlert
 from backend.schemas import NewsAlertOut
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import requests
 import random
@@ -140,7 +140,7 @@ def fetch_live_news() -> List[dict]:
                 "severity": severity,
                 "lat": lat,
                 "lng": lng,
-                "timestamp": datetime.utcnow()
+                "timestamp": datetime.now(timezone.utc)
             })
         return news_items
     except Exception:
@@ -171,7 +171,7 @@ def seed_news_if_empty(db: Session):
                     severity=item["severity"],
                     lat=item["lat"],
                     lng=item["lng"],
-                    timestamp=datetime.utcnow() - timedelta(hours=3),
+                    timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
                     is_live=False
                 )
                 db.add(alert)
@@ -202,7 +202,7 @@ def refresh_news(db: Session = Depends(get_db)):
             db.add(alert)
         db.commit()
         msg = f"Fetched {len(live_news)} live safety alerts."
-        status = "success"
+        result_status = "success"
     else:
         for item in MOCK_NEWS:
             alert = NewsAlert(
@@ -211,15 +211,15 @@ def refresh_news(db: Session = Depends(get_db)):
                 severity=item["severity"],
                 lat=item["lat"],
                 lng=item["lng"],
-                timestamp=datetime.utcnow() - timedelta(hours=3),
+                timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
                 is_live=False
             )
             db.add(alert)
         db.commit()
         msg = "News API call failed or returned empty. Populated mock caution signals."
-        status = "fallback"
+        result_status = "fallback"
         
     return {
-        "status": status,
+        "status": result_status,
         "message": msg
     }

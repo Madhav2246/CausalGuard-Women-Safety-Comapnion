@@ -4,7 +4,7 @@ from typing import List
 from backend.database import get_db, Alert, User
 from backend.auth import get_current_user, get_current_verified_woman
 from backend.schemas import PoliceProtectionRequest, PoliceAlertOut, PoliceAlertUpdate
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/police", tags=["Police Dashboard"])
 
@@ -22,7 +22,7 @@ def request_protection(
         route_details=req.route_details,
         status="New",
         alert_type="Protection Request",
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     db.add(alert)
     db.commit()

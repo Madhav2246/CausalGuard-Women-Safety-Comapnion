@@ -1,9 +1,8 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, relationship
 
 # Always use an absolute path so the DB location is consistent regardless of CWD
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -11,7 +10,9 @@ DATABASE_URL = f"sqlite:///{os.path.join(_HERE, 'causalguard.db')}"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 # 1. Users Table
 class User(Base):
@@ -59,7 +60,7 @@ class GuardianPermission(Base):
     id = Column(Integer, primary_key=True, index=True)
     guardian_link_id = Column(Integer, ForeignKey("guardians.id"))
     permission_level = Column(String)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime, nullable=True)
 
 # 4. Journeys Table
@@ -80,7 +81,7 @@ class Journey(Base):
     check_in_time = Column(DateTime, nullable=True)
     risk_score = Column(Integer, default=0)
     status = Column(String, default="Active") # Active, Ended
-    start_time = Column(DateTime, default=datetime.utcnow)
+    start_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     end_time = Column(DateTime, nullable=True)
     route_polyline = Column(Text, nullable=True) # JSON string of route coordinates
 
@@ -95,7 +96,7 @@ class JourneyLocation(Base):
     journey_id = Column(Integer, ForeignKey("journeys.id"))
     latitude = Column(Float)
     longitude = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # 6. Route Options Table
 class RouteOption(Base):
@@ -122,7 +123,7 @@ class Alert(Base):
     risk_score = Column(Integer)
     route_details = Column(Text, nullable=True)
     status = Column(String, default="New") # New, Viewed, Responding, Resolved
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     alert_type = Column(String) # SOS, Protection Request
 
     user = relationship("User", back_populates="alerts")
@@ -135,7 +136,7 @@ class SOSEvent(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     latitude = Column(Float)
     longitude = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     status = Column(String, default="Active") # Active, Resolved
     resolved_at = Column(DateTime, nullable=True)
 
@@ -152,7 +153,7 @@ class PoliceAlert(Base):
     risk_score = Column(Integer)
     alert_details = Column(Text)
     status = Column(String, default="New") # New, Responding, Resolved
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # 10. Evidence Table
 class Evidence(Base):
@@ -165,7 +166,7 @@ class Evidence(Base):
     description = Column(Text)
     file_content = Column(Text, nullable=True) # Base64 data
     file_name = Column(String, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="evidences")
 
@@ -181,7 +182,7 @@ class Feedback(Base):
     incident_happened = Column(Boolean)
     crowd_estimate_correct = Column(Boolean)
     comments = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     journey = relationship("Journey", back_populates="feedbacks")
 
@@ -209,7 +210,7 @@ class NewsAlert(Base):
     severity = Column(String) # Low, Medium, High
     lat = Column(Float)
     lng = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     is_live = Column(Boolean, default=False)
 
 # 14. Health Profiles Table
@@ -239,7 +240,7 @@ class CabTrip(Base):
     journey_id = Column(Integer, ForeignKey("journeys.id"))
     vehicle_number = Column(String)
     driver_name = Column(String, nullable=True)
-    start_time = Column(DateTime, default=datetime.utcnow)
+    start_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # 17. Voice Logs Table
 class VoiceLog(Base):
@@ -250,7 +251,7 @@ class VoiceLog(Base):
     command_text = Column(Text)
     recognized_intent = Column(String)
     response_text = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # 18. RAG Sources Table
 class RAGSource(Base):
@@ -258,7 +259,7 @@ class RAGSource(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     document_name = Column(String)
-    last_indexed = Column(DateTime, default=datetime.utcnow)
+    last_indexed = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 def init_db():
     Base.metadata.create_all(bind=engine)

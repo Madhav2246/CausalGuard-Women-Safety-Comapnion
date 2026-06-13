@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add parent directory to sys.path to allow absolute imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -111,7 +111,7 @@ def seed_database():
                     severity="Medium",
                     lat=18.5212,
                     lng=73.8398,
-                    timestamp=datetime.utcnow() - timedelta(hours=2)
+                    timestamp=datetime.now(timezone.utc) - timedelta(hours=2)
                 ),
                 NewsAlert(
                     title="Police patrol alert: Recent chain snatching incident near Shivajinagar crossing.",
@@ -119,7 +119,7 @@ def seed_database():
                     severity="High",
                     lat=18.5265,
                     lng=73.8432,
-                    timestamp=datetime.utcnow() - timedelta(hours=4)
+                    timestamp=datetime.now(timezone.utc) - timedelta(hours=4)
                 ),
                 NewsAlert(
                     title="Minor pickpocketing and heavy festive crowding reported near Lakshmi Road shopping block.",
@@ -127,7 +127,7 @@ def seed_database():
                     severity="Low",
                     lat=18.5140,
                     lng=73.8560,
-                    timestamp=datetime.utcnow() - timedelta(hours=6)
+                    timestamp=datetime.now(timezone.utc) - timedelta(hours=6)
                 )
             ]
             db.bulk_save_objects(alerts)
@@ -150,7 +150,7 @@ def seed_database():
                 "guardian_tracking_policy.md"
             ]
             for doc in sources:
-                db.add(RAGSource(document_name=doc, last_indexed=datetime.utcnow()))
+                db.add(RAGSource(document_name=doc, last_indexed=datetime.now(timezone.utc)))
             db.commit()
             print("Seeded RAG source records.")
 

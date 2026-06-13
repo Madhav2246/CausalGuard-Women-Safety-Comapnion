@@ -54,7 +54,7 @@ def calculate_point_risk(
 
     try:
         hour = int(time_of_day.split(":")[0])
-    except:
+    except (ValueError, IndexError):
         hour = datetime.now().hour
 
     is_late_night = hour >= 22 or hour < 4

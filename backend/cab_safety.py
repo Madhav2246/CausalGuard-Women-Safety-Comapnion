@@ -4,7 +4,7 @@ from backend.database import get_db, Journey, User, Evidence
 from backend.auth import get_current_verified_woman
 from backend.schemas import CabTripStart, CabLocationUpdate, CabDeviationCheck
 from backend.route_risk import haversine_distance
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 
@@ -45,7 +45,7 @@ def start_cab_monitoring(
         mode="Cab Safety",
         risk_score=20,
         status="Active",
-        start_time=datetime.utcnow(),
+        start_time=datetime.now(timezone.utc),
         route_polyline=json.dumps(route_coords)
     )
     db.add(db_journey)
@@ -57,7 +57,7 @@ def start_cab_monitoring(
         title=f"Cab Ride Log: {trip.vehicle_number}",
         content_type="vehicle",
         description=f"Trip started in vehicle {trip.vehicle_number} driven by {trip.driver_name or 'N/A'}. Route: ({trip.start_lat}, {trip.start_lng}) to ({trip.dest_lat}, {trip.dest_lng})",
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     db.add(evidence)
     db.commit()
@@ -151,7 +151,7 @@ def end_cab_trip(
     if not journey:
         raise HTTPException(status_code=404, detail="No active cab journey found.")
     journey.status = "Ended"
-    journey.end_time = datetime.utcnow()
+    journey.end_time = datetime.now(timezone.utc)
     db.commit()
     return {"status": "success", "message": "Cab journey ended."}
 

@@ -13,7 +13,7 @@ def get_privacy_settings(
 ):
     try:
         preferences = json.loads(current_user.consent_preferences or "{}")
-    except:
+    except (json.JSONDecodeError, TypeError):
         preferences = {}
         
     default_settings = {

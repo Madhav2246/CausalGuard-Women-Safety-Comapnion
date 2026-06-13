@@ -1,5 +1,7 @@
 import os
 import sys
+import tempfile
+from contextlib import asynccontextmanager
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import FastAPI, Request, Response, Depends, UploadFile, File, HTTPException
@@ -33,14 +35,28 @@ from backend.voice.stt import init_whisper, transcribe_audio
 from backend.voice.tts import init_tts, generate_speech
 from backend.agents.graph import compiled_graph
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern FastAPI lifespan handler (replaces deprecated @app.on_event)."""
+    # Startup
+    init_db()
+    init_rag_index()
+    init_whisper()
+    init_tts()
+    yield
+    # Shutdown (cleanup if needed)
+
 app = FastAPI(
     title="CausalGuard API",
     description="Women-First AI Safety & Well-Being Companion API Backend",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# NOTE: This regex matches ALL origins — acceptable for hackathon/dev.
+# For production, restrict to specific frontend domains.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex="https?://.*",
@@ -48,16 +64,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def on_startup():
-    # 1. Initialize SQLite Database Tables
-    init_db()
-    # 2. Ingest Guidelines into LlamaIndex
-    init_rag_index()
-    # 3. Pre-load Whisper / XTTS voice engines (gracefully fallback if missing)
-    init_whisper()
-    init_tts()
 
 # Include Subsystem Routers
 app.include_router(users_router)
@@ -200,10 +206,10 @@ def get_rag_sources(db: Session = Depends(get_db)):
 
 @app.post("/api/voice/transcribe")
 def transcribe_voice(file: UploadFile = File(...)):
-    temp_path = "temp_voice_upload.wav"
     try:
-        with open(temp_path, "wb") as buffer:
-            buffer.write(file.file.read())
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(file.file.read())
+            temp_path = tmp.name
         res = transcribe_audio(temp_path)
         return res
     finally:
@@ -212,7 +218,8 @@ def transcribe_voice(file: UploadFile = File(...)):
 
 @app.post("/api/voice/speak")
 def speak_voice(req: SpeakRequest):
-    temp_output = "temp_synthesis_output.wav"
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        temp_output = tmp.name
     res = generate_speech(req.text, temp_output, req.language)
     return res
 

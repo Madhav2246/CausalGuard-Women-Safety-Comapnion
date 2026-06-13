@@ -19,6 +19,7 @@ class AgentState(TypedDict):
     rag_context: str
     agent_outputs: Dict[str, Any]
     final_response: str
+    recommended_action: str
     action: List[str]
     missing_data_notes: List[str]
     voice_risk_score: Optional[int]

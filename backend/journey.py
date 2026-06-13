@@ -1,7 +1,8 @@
 import json
+import math
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -254,7 +255,6 @@ def recommend_routes(request: RouteRecommendRequest, db: Session = Depends(get_d
                 mid_lat, mid_lng = first_route_coords[mid_idx]
                 
                 # Calculate perpendicular offset from the direction vector to force a parallel road path
-                import math
                 start_pt = first_route_coords[0]
                 dest_pt = first_route_coords[-1]
                 d_lat = dest_pt[0] - start_pt[0]
@@ -281,6 +281,9 @@ def recommend_routes(request: RouteRecommendRequest, db: Session = Depends(get_d
                 )
                 if alt_routes:
                     osrm_routes.append(alt_routes[0])
+
+        # Pre-query news alerts once for all routes (avoid N+1 queries)
+        all_news_alerts = db.query(NewsAlert).all()
 
         for idx, route in enumerate(osrm_routes):
             coords = [[pt[1], pt[0]] for pt in route["geometry"]["coordinates"]]
@@ -315,8 +318,7 @@ def recommend_routes(request: RouteRecommendRequest, db: Session = Depends(get_d
             )
             
             news_alerts_count = 0
-            news_alerts = db.query(NewsAlert).all()
-            for alert in news_alerts:
+            for alert in all_news_alerts:
                 for lat, lng in coords[::max(1, len(coords)//10)]:
                     if haversine_distance(lat, lng, alert.lat, alert.lng) < 0.5:
                         news_alerts_count += 1
@@ -434,12 +436,12 @@ def start_journey(
     
     if active:
         active.status = "Ended"
-        active.end_time = datetime.utcnow()
+        active.end_time = datetime.now(timezone.utc)
         db.commit()
 
     check_in = None
     if trip.check_in_minutes:
-        check_in = datetime.utcnow() + timedelta(minutes=trip.check_in_minutes)
+        check_in = datetime.now(timezone.utc) + timedelta(minutes=trip.check_in_minutes)
 
     polyline_coords = get_fallback_coordinates(trip.start_lat, trip.start_lng, trip.dest_lat, trip.dest_lng, is_safest=True)
     if USE_OSRM:
@@ -461,7 +463,7 @@ def start_journey(
         check_in_time=check_in,
         risk_score=35,
         status="Active",
-        start_time=datetime.utcnow(),
+        start_time=datetime.now(timezone.utc),
         route_polyline=json.dumps(polyline_coords)
     )
     db.add(db_journey)
@@ -522,7 +524,7 @@ def end_journey(
         )
 
     journey.status = "Ended"
-    journey.end_time = datetime.utcnow()
+    journey.end_time = datetime.now(timezone.utc)
     db.commit()
     db.refresh(journey)
     return journey

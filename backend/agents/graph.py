@@ -79,6 +79,7 @@ class FallbackGraph:
 
 def db_news_agent_helper(state: AgentState) -> AgentState:
     """Helper to query local news alerts from the DB in the state graph."""
+    db = None
     try:
         from backend.database import SessionLocal, NewsAlert
         db = SessionLocal()
@@ -87,10 +88,12 @@ def db_news_agent_helper(state: AgentState) -> AgentState:
             {"title": a.title, "location": a.location, "severity": a.severity, "lat": a.lat, "lng": a.lng}
             for a in alerts
         ]
-        db.close()
     except Exception as e:
         logger.error(f"News DB query failed: {e}")
         state = run_news_agent(state)
+    finally:
+        if db is not None:
+            db.close()
     return state
 
 # Use the action-first router graph directly for 100% uptime and speed
